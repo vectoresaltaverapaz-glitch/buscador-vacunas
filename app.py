@@ -33,7 +33,7 @@ def verify_password(usuario, password):
     return usuario in USUARIOS and USUARIOS[usuario] == password
 
 # ==================================================
-# TURSO (Base de datos en la nube) - API CORRECTA
+# TURSO - CONEXIÓN CORRECTA
 # ==================================================
 
 def get_turso_client():
@@ -45,7 +45,6 @@ def get_turso_client():
         raise Exception("Faltan variables de entorno TURSO_URL o TURSO_TOKEN")
     
     logger.info(f"✅ Conectando a Turso: {url}")
-    # TursoConnection no tiene cursor, usamos directamente el cliente
     return TursoConnection(database_url=url, auth_token=token)
 
 # ==================================================
@@ -175,7 +174,7 @@ def procesar_valor(columna, valor):
     return limpiar_numero(valor)
 
 # ==================================================
-# HTML (se mantiene igual)
+# HTML
 # ==================================================
 
 HTML = """
@@ -265,7 +264,7 @@ def index():
     return render_template_string(HTML)
 
 # ==================================================
-# BUSQUEDA - CORREGIDO SIN .cursor()
+# BUSQUEDA - CORREGIDO (SIN CURSOR)
 # ==================================================
 
 @app.route('/buscar')
@@ -278,7 +277,7 @@ def buscar():
     logger.info(f"🔍 Búsqueda: query='{query}', tipo='{tipo}', distrito='{distrito}'")
 
     try:
-        client = get_turso_client()  # Esto devuelve TursoConnection
+        client = get_turso_client()
 
         mapa = {
             "nombre_nino": "nombre_de_la_niña_o_del_niño",
@@ -312,12 +311,11 @@ def buscar():
         logger.info(f"📝 SQL: {sql}")
         logger.info(f"📦 Parámetros: {parametros}")
 
-        # CORRECCIÓN: usar execute directamente
+        # CORRECCIÓN: usar execute directamente, sin cursor
         result = client.execute(sql, parametros)
         rows = result.fetchall()
         logger.info(f"📊 Filas obtenidas: {len(rows)}")
 
-        # Obtener nombres de columnas desde la descripción
         if rows:
             col_names = [desc[0] for desc in result.description]
         else:
@@ -349,7 +347,7 @@ def buscar():
         return jsonify({"error": str(e)}), 500
 
 # ==================================================
-# EXPORTAR - CORREGIDO
+# EXPORTAR - CORREGIDO (SIN CURSOR)
 # ==================================================
 
 @app.route('/exportar')
