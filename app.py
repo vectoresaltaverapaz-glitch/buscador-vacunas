@@ -1,4 +1,5 @@
 import logging
+import os
 from flask import Flask, render_template_string, request, jsonify, Response
 from flask_httpauth import HTTPBasicAuth
 from datetime import datetime, timedelta
@@ -6,7 +7,6 @@ from io import BytesIO
 from turso_python.connection import TursoConnection
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
-import os
 
 # Configurar logging
 logging.basicConfig(level=logging.DEBUG)
@@ -33,7 +33,7 @@ def verify_password(usuario, password):
     return usuario in USUARIOS and USUARIOS[usuario] == password
 
 # ==================================================
-# TURSO (Base de datos en la nube)
+# TURSO (Base de datos en la nube) - API CORRECTA
 # ==================================================
 
 def get_turso_client():
@@ -45,6 +45,7 @@ def get_turso_client():
         raise Exception("Faltan variables de entorno TURSO_URL o TURSO_TOKEN")
     
     logger.info(f"✅ Conectando a Turso: {url}")
+    # TursoConnection no tiene cursor, usamos directamente el cliente
     return TursoConnection(database_url=url, auth_token=token)
 
 # ==================================================
@@ -264,7 +265,7 @@ def index():
     return render_template_string(HTML)
 
 # ==================================================
-# BUSQUEDA
+# BUSQUEDA - CORREGIDO SIN .cursor()
 # ==================================================
 
 @app.route('/buscar')
@@ -277,8 +278,7 @@ def buscar():
     logger.info(f"🔍 Búsqueda: query='{query}', tipo='{tipo}', distrito='{distrito}'")
 
     try:
-        client = get_turso_client()
-        cursor = client.cursor()
+        client = get_turso_client()  # Esto devuelve TursoConnection
 
         mapa = {
             "nombre_nino": "nombre_de_la_niña_o_del_niño",
@@ -312,16 +312,20 @@ def buscar():
         logger.info(f"📝 SQL: {sql}")
         logger.info(f"📦 Parámetros: {parametros}")
 
-        cursor.execute(sql, parametros)
-        rows = cursor.fetchall()
+        # CORRECCIÓN: usar execute directamente
+        result = client.execute(sql, parametros)
+        rows = result.fetchall()
         logger.info(f"📊 Filas obtenidas: {len(rows)}")
 
-        col_names = [desc[0] for desc in cursor.description]
+        # Obtener nombres de columnas desde la descripción
+        if rows:
+            col_names = [desc[0] for desc in result.description]
+        else:
+            col_names = []
         logger.info(f"📋 Columnas: {col_names}")
 
         rows_dict = [dict(zip(col_names, row)) for row in rows]
 
-        cursor.close()
         client.close()
 
         if not rows_dict:
@@ -345,7 +349,7 @@ def buscar():
         return jsonify({"error": str(e)}), 500
 
 # ==================================================
-# EXPORTAR
+# EXPORTAR - CORREGIDO
 # ==================================================
 
 @app.route('/exportar')
@@ -359,7 +363,6 @@ def exportar():
 
     try:
         client = get_turso_client()
-        cursor = client.cursor()
 
         mapa = {
             "nombre_nino": "nombre_de_la_niña_o_del_niño",
@@ -387,9 +390,12 @@ def exportar():
         sql = f"SELECT rowid,* FROM datos_completos {f'WHERE {where}' if where else ''}"
         logger.info(f"📝 SQL export: {sql}")
 
-        cursor.execute(sql, parametros)
-        rows = cursor.fetchall()
-        col_names = [desc[0] for desc in cursor.description]
+        result = client.execute(sql, parametros)
+        rows = result.fetchall()
+        if rows:
+            col_names = [desc[0] for desc in result.description]
+        else:
+            col_names = []
         rows_dict = [dict(zip(col_names, row)) for row in rows]
 
         wb = Workbook()
@@ -415,7 +421,6 @@ def exportar():
         wb.save(output)
         output.seek(0)
 
-        cursor.close()
         client.close()
 
         return Response(
@@ -434,4 +439,4 @@ def exportar():
 
 if __name__ == '__main__':
     logger.info("🚀 Servidor iniciado...")
-    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True) 
+    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
