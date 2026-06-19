@@ -6,6 +6,7 @@ from io import BytesIO
 from turso_python.connection import TursoConnection
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
+import os
 
 # ==================================================
 # APP
@@ -28,11 +29,10 @@ def verify_password(usuario, password):
     return usuario in USUARIOS and USUARIOS[usuario] == password
 
 # ==================================================
-# TURSO (Base de datos en la nube) - CON VARIABLES DE ENTORNO
+# TURSO (Base de datos en la nube)
 # ==================================================
 
 def get_turso_client():
-    import os
     url = os.getenv("TURSO_URL", "libsql://buscador-vacunas-temp-vectorz26.aws-us-east-2.turso.io")
     token = os.getenv("TURSO_TOKEN", "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODE3Mjk2NjQsImlkIjoiMDE5ZThmNWUtOTMwMS03NWJkLWJkOWQtY2QzZWQwZmQwNzk2IiwicmlkIjoiNGExNjhkNjgtZGNhNS00ZmVjLWI4NjctZWU4MDYyYjdkM2FiIn0.vbcP22UhdG4qsYdbmvWDkMbHPj7v0cspXkbXKPr1H2pvEPqG4rMEL3XwydDknjYSbISXgztc5hFuE1pkE2RjBA")
     return TursoConnection(database_url=url, auth_token=token)
