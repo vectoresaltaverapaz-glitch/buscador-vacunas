@@ -4,7 +4,7 @@ from flask import Flask, render_template_string, request, jsonify, Response
 from flask_httpauth import HTTPBasicAuth
 from datetime import datetime, timedelta
 from io import BytesIO
-from turso_python.connection import TursoConnection
+import libsql_client
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
@@ -33,7 +33,7 @@ def verify_password(usuario, password):
     return usuario in USUARIOS and USUARIOS[usuario] == password
 
 # ==================================================
-# TURSO - CONEXIÓN CORRECTA
+# TURSO - CONEXIÓN CON libsql-client
 # ==================================================
 
 def get_turso_client():
@@ -45,7 +45,7 @@ def get_turso_client():
         raise Exception("Faltan variables de entorno TURSO_URL o TURSO_TOKEN")
     
     logger.info(f"✅ Conectando a Turso: {url}")
-    return TursoConnection(database_url=url, auth_token=token)
+    return libsql_client.create_client_sync(url=url, auth_token=token)
 
 # ==================================================
 # RENOMBRES (se mantiene igual)
@@ -264,7 +264,7 @@ def index():
     return render_template_string(HTML)
 
 # ==================================================
-# BUSQUEDA - CORREGIDO (SIN CURSOR)
+# BUSQUEDA - CORREGIDA CON libsql-client
 # ==================================================
 
 @app.route('/buscar')
@@ -311,7 +311,7 @@ def buscar():
         logger.info(f"📝 SQL: {sql}")
         logger.info(f"📦 Parámetros: {parametros}")
 
-        # CORRECCIÓN: usar execute directamente, sin cursor
+        # EJECUCIÓN CON libsql-client
         result = client.execute(sql, parametros)
         rows = result.fetchall()
         logger.info(f"📊 Filas obtenidas: {len(rows)}")
@@ -347,7 +347,7 @@ def buscar():
         return jsonify({"error": str(e)}), 500
 
 # ==================================================
-# EXPORTAR - CORREGIDO (SIN CURSOR)
+# EXPORTAR - CORREGIDA CON libsql-client
 # ==================================================
 
 @app.route('/exportar')
