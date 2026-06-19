@@ -1,0 +1,4 @@
+*.db
+app mia/
+*.pyc
+__pycache__/
