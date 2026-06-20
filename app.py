@@ -33,7 +33,7 @@ def verify_password(usuario, password):
     return usuario in USUARIOS and USUARIOS[usuario] == password
 
 # ==================================================
-# TURSO - CONEXIÓN CON libsql-client
+# TURSO - CONEXIÓN CON libsql-client (VERSIÓN HTTP)
 # ==================================================
 
 def get_turso_client():
@@ -174,7 +174,7 @@ def procesar_valor(columna, valor):
     return limpiar_numero(valor)
 
 # ==================================================
-# HTML
+# HTML (se mantiene igual)
 # ==================================================
 
 HTML = """
@@ -264,7 +264,7 @@ def index():
     return render_template_string(HTML)
 
 # ==================================================
-# BUSQUEDA - CORREGIDA CON libsql-client
+# BUSQUEDA - CORREGIDA CON API DE libsql-client
 # ==================================================
 
 @app.route('/buscar')
@@ -311,15 +311,25 @@ def buscar():
         logger.info(f"📝 SQL: {sql}")
         logger.info(f"📦 Parámetros: {parametros}")
 
-        # EJECUCIÓN CON libsql-client
+        # CORRECCIÓN: Obtener filas correctamente
         result = client.execute(sql, parametros)
-        rows = result.fetchall()
-        logger.info(f"📊 Filas obtenidas: {len(rows)}")
-
-        if rows:
-            col_names = [desc[0] for desc in result.description]
+        
+        # Verificar método de obtención de filas
+        if hasattr(result, 'rows'):
+            rows = result.rows()
         else:
-            col_names = []
+            # Fallback si no tiene rows()
+            rows = result.fetchall() if hasattr(result, 'fetchall') else []
+        
+        logger.info(f"📊 Filas obtenidas: {len(rows)}")
+        
+        # Obtener nombres de columna
+        if hasattr(result, 'columns'):
+            col_names = result.columns()
+        else:
+            # Fallback con description
+            col_names = [desc[0] for desc in result.description] if hasattr(result, 'description') else []
+        
         logger.info(f"📋 Columnas: {col_names}")
 
         rows_dict = [dict(zip(col_names, row)) for row in rows]
@@ -347,7 +357,7 @@ def buscar():
         return jsonify({"error": str(e)}), 500
 
 # ==================================================
-# EXPORTAR - CORREGIDA CON libsql-client
+# EXPORTAR - CORREGIDA CON API DE libsql-client
 # ==================================================
 
 @app.route('/exportar')
@@ -389,11 +399,21 @@ def exportar():
         logger.info(f"📝 SQL export: {sql}")
 
         result = client.execute(sql, parametros)
-        rows = result.fetchall()
+        
+        # Obtener filas correctamente
+        if hasattr(result, 'rows'):
+            rows = result.rows()
+        else:
+            rows = result.fetchall() if hasattr(result, 'fetchall') else []
+        
         if rows:
-            col_names = [desc[0] for desc in result.description]
+            if hasattr(result, 'columns'):
+                col_names = result.columns()
+            else:
+                col_names = [desc[0] for desc in result.description] if hasattr(result, 'description') else []
         else:
             col_names = []
+        
         rows_dict = [dict(zip(col_names, row)) for row in rows]
 
         wb = Workbook()
