@@ -8,6 +8,7 @@ import libsql_client
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
+# Configurar logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def get_turso_client():
     return libsql_client.create_client_sync(url=url, auth_token=token)
 
 # ==================================================
-# RENOMBRES Y COLUMNAS FECHA
+# RENOMBRES Y COLUMNAS FECHA (completos)
 # ==================================================
 
 RENOMBRES = {
@@ -121,6 +122,10 @@ COLUMNAS_FECHA = {
     "1a..7", "2a..7", "3a.."
 }
 
+# ==================================================
+# FUNCIONES DE PROCESAMIENTO
+# ==================================================
+
 def limpiar_numero(valor):
     try:
         if valor is None:
@@ -149,6 +154,10 @@ def procesar_valor(columna, valor):
     if columna in COLUMNAS_FECHA:
         return convertir_fecha_excel(valor)
     return limpiar_numero(valor)
+
+# ==================================================
+# HTML (igual)
+# ==================================================
 
 HTML = """
 <!DOCTYPE html>
@@ -227,6 +236,10 @@ function exportarExcel(){
 </html>
 """
 
+# ==================================================
+# RUTAS
+# ==================================================
+
 @app.route('/')
 @auth.login_required
 def index():
@@ -266,47 +279,52 @@ def buscar():
             parametros.append(f"%{distrito.upper()}%")
         
         where = " AND ".join(condiciones) if condiciones else ""
-        # Reducir a 30 filas para evitar timeout
+        
+        # CRUCIAL: Seleccionar solo las columnas necesarias (todas excepto las que no se muestran)
+        # Para simplificar, seleccionamos todas las columnas pero luego filtramos en el código.
+        # Pero para evitar col_0, necesitamos que los nombres de columna sean reales.
+        # Usaremos PRAGMA table_info para obtener los nombres de columna y construir la consulta.
+        # Primero, obtenemos los nombres de columna de la tabla
+        pragma_result = client.execute("PRAGMA table_info(datos_completos)")
+        pragma_rows = pragma_result.fetchall()
+        # Obtener nombres reales de columna
+        # pragma_rows es una lista de tuplas: (cid, name, type, notnull, dflt_value, pk)
+        all_columns = [row[1] for row in pragma_rows]  # row[1] es el nombre de la columna
+        logger.info(f"📋 Columnas reales desde PRAGMA: {all_columns}")
+        
+        # Filtrar columnas que no se quieren mostrar
+        exclude = ["día", "mes", "año_1", "hombre", "mujer"]
+        columns_to_select = [c for c in all_columns if c not in exclude]
+        # Asegurar que rowid está incluido (si no está en all_columns, agregarlo)
+        if "rowid" not in columns_to_select:
+            columns_to_select = ["rowid"] + columns_to_select
+        
+        # Construir la consulta SELECT con las columnas específicas (evita col_0)
+        select_clause = ", ".join([f'"{c}"' for c in columns_to_select])
         sql = f"""
-        SELECT rowid,* FROM datos_completos
+        SELECT {select_clause} FROM datos_completos
         {f'WHERE {where}' if where else ''}
-        LIMIT 30
+        LIMIT 50
         """
         logger.info(f"📝 SQL: {sql}")
         logger.info(f"📦 Parámetros: {parametros}")
         
         result = client.execute(sql, parametros)
+        rows = result.fetchall()
         
-        # Obtener nombres de columna reales desde result.description
-        columns = []
+        # Obtener nombres de columna desde la respuesta (deberían ser los reales porque usamos PRAGMA)
+        # Pero también podemos usar description
         if hasattr(result, 'description') and result.description:
-            # description es una lista de tuplas (nombre, tipo, ...)
-            columns = [col[0] for col in result.description]
-            logger.info(f"📋 Columnas desde description: {columns}")
-        elif hasattr(result, 'columns') and callable(result.columns):
-            columns = result.columns()
-            logger.info(f"📋 Columnas desde columns(): {columns}")
+            col_names = [col[0] for col in result.description]
         else:
-            # Si no hay description, intentar obtener desde las filas si son diccionarios
-            rows = result if isinstance(result, list) else list(result)
-            if rows and isinstance(rows[0], dict):
-                columns = list(rows[0].keys())
-                logger.info(f"📋 Columnas desde dict: {columns}")
-            else:
-                # Fallback: nombres genéricos
-                columns = [f"col_{i}" for i in range(len(rows[0]))] if rows else []
-                logger.info(f"📋 Columnas genéricas: {columns}")
+            # Fallback: usar los nombres que construimos
+            col_names = columns_to_select
         
-        # Obtener filas
-        if hasattr(result, 'rows') and callable(result.rows):
-            rows = result.rows()
-        else:
-            rows = result if isinstance(result, list) else list(result)
-        
+        logger.info(f"📋 Columnas devueltas: {col_names}")
         logger.info(f"📊 Filas obtenidas: {len(rows)}")
         
-        # Convertir a diccionarios
-        rows_dict = [dict(zip(columns, row)) for row in rows] if columns else []
+        # Convertir a lista de diccionarios
+        rows_dict = [dict(zip(col_names, row)) for row in rows]
         
         client.close()
         
@@ -314,9 +332,9 @@ def buscar():
             logger.warning("⚠️ No se encontraron resultados")
             return jsonify({"rows": [], "columnas": [], "total": 0})
         
-        # Procesar columnas finales
+        # Procesar columnas finales (ya están filtradas, pero aseguramos)
         columnas = list(rows_dict[0].keys())
-        columnas_finales = [c for c in columnas if c not in ["día", "mes", "año_1", "hombre", "mujer"]]
+        columnas_finales = [c for c in columnas if c not in exclude]
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
         
         resultados = []
@@ -360,28 +378,29 @@ def exportar():
             parametros.append(f"%{distrito.upper()}%")
         
         where = " AND ".join(condiciones) if condiciones else ""
-        sql = f"SELECT rowid,* FROM datos_completos {f'WHERE {where}' if where else ''}"
+        
+        # Obtener nombres de columna reales
+        pragma_result = client.execute("PRAGMA table_info(datos_completos)")
+        pragma_rows = pragma_result.fetchall()
+        all_columns = [row[1] for row in pragma_rows]
+        exclude = ["día", "mes", "año_1", "hombre", "mujer"]
+        columns_to_select = [c for c in all_columns if c not in exclude]
+        if "rowid" not in columns_to_select:
+            columns_to_select = ["rowid"] + columns_to_select
+        
+        select_clause = ", ".join([f'"{c}"' for c in columns_to_select])
+        sql = f"SELECT {select_clause} FROM datos_completos {f'WHERE {where}' if where else ''}"
         logger.info(f"📝 SQL export: {sql}")
         
         result = client.execute(sql, parametros)
-        columns = []
+        rows = result.fetchall()
+        
         if hasattr(result, 'description') and result.description:
-            columns = [col[0] for col in result.description]
-        elif hasattr(result, 'columns') and callable(result.columns):
-            columns = result.columns()
+            col_names = [col[0] for col in result.description]
         else:
-            rows = result if isinstance(result, list) else list(result)
-            if rows and isinstance(rows[0], dict):
-                columns = list(rows[0].keys())
-            else:
-                columns = [f"col_{i}" for i in range(len(rows[0]))] if rows else []
+            col_names = columns_to_select
         
-        if hasattr(result, 'rows') and callable(result.rows):
-            rows = result.rows()
-        else:
-            rows = result if isinstance(result, list) else list(result)
-        
-        rows_dict = [dict(zip(columns, row)) for row in rows] if columns else []
+        rows_dict = [dict(zip(col_names, row)) for row in rows]
         
         wb = Workbook()
         ws = wb.active
@@ -389,7 +408,7 @@ def exportar():
         
         if rows_dict:
             columnas = list(rows_dict[0].keys())
-            columnas_finales = [c for c in columnas if c not in ["día", "mes", "año_1", "hombre", "mujer"]]
+            columnas_finales = [c for c in columnas if c not in exclude]
             titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
             ws.append(titulos_columnas)
             for cell in ws[1]:
