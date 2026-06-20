@@ -8,6 +8,7 @@ import libsql_client
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
+# Configurar logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,10 @@ def get_turso_client():
         raise Exception("Faltan variables de entorno")
     logger.info(f"✅ Conectando a Turso: {url}")
     return libsql_client.create_client_sync(url=url, auth_token=token)
+
+# ==================================================
+# RENOMBRES Y COLUMNAS FECHA (igual que antes)
+# ==================================================
 
 RENOMBRES = {
     "rowid": "ID",
@@ -117,6 +122,10 @@ COLUMNAS_FECHA = {
     "1a..7", "2a..7", "3a.."
 }
 
+# ==================================================
+# FUNCIONES DE PROCESAMIENTO
+# ==================================================
+
 def limpiar_numero(valor):
     try:
         if valor is None:
@@ -145,6 +154,10 @@ def procesar_valor(columna, valor):
     if columna in COLUMNAS_FECHA:
         return convertir_fecha_excel(valor)
     return limpiar_numero(valor)
+
+# ==================================================
+# HTML (igual)
+# ==================================================
 
 HTML = """
 <!DOCTYPE html>
@@ -223,6 +236,10 @@ function exportarExcel(){
 </html>
 """
 
+# ==================================================
+# RUTAS
+# ==================================================
+
 @app.route('/')
 @auth.login_required
 def index():
@@ -262,32 +279,42 @@ def buscar():
             parametros.append(f"%{distrito.upper()}%")
         
         where = " AND ".join(condiciones) if condiciones else ""
+        # Reducir límite para evitar timeout (de 300 a 150)
         sql = f"""
         SELECT rowid,* FROM datos_completos
         {f'WHERE {where}' if where else ''}
-        LIMIT 300
+        LIMIT 150
         """
         logger.info(f"📝 SQL: {sql}")
         logger.info(f"📦 Parámetros: {parametros}")
         
-        # Ejecutar consulta y manejar el resultado de forma robusta
         result = client.execute(sql, parametros)
         
-        # Verificar si result es un objeto ResultSet o una lista
-        if hasattr(result, 'rows') and callable(result.rows):
-            rows = result.rows()
-            columns = result.columns() if hasattr(result, 'columns') and callable(result.columns) else []
-            logger.info(f"📋 Columnas (desde ResultSet): {columns}")
+        # OBTENER NOMBRES DE COLUMNA REALES
+        # Intenta obtener desde result.description (libsql_client)
+        columns = []
+        if hasattr(result, 'description') and result.description:
+            columns = [col[0] for col in result.description]  # description es lista de tuplas
+            logger.info(f"📋 Columnas desde description: {columns}")
+        elif hasattr(result, 'columns') and callable(result.columns):
+            columns = result.columns()
+            logger.info(f"📋 Columnas desde columns(): {columns}")
         else:
-            # Si es lista, ya está
+            # Fallback: si result es una lista de filas y primera es dict
             rows = result if isinstance(result, list) else list(result)
-            # Si la primera fila es un diccionario, extraer columnas
             if rows and isinstance(rows[0], dict):
                 columns = list(rows[0].keys())
+                logger.info(f"📋 Columnas desde dict keys: {columns}")
             else:
-                # Fallback: nombres genéricos
+                # Si no hay columnas, crear genéricas
                 columns = [f"col_{i}" for i in range(len(rows[0]))] if rows else []
-            logger.info(f"📋 Columnas (deducidas): {columns}")
+                logger.info(f"📋 Columnas genéricas: {columns}")
+        
+        # Obtener filas
+        if hasattr(result, 'rows') and callable(result.rows):
+            rows = result.rows()
+        else:
+            rows = result if isinstance(result, list) else list(result)
         
         logger.info(f"📊 Filas obtenidas: {len(rows)}")
         
@@ -300,7 +327,7 @@ def buscar():
             logger.warning("⚠️ No se encontraron resultados")
             return jsonify({"rows": [], "columnas": [], "total": 0})
         
-        # Procesar columnas finales
+        # Procesar columnas finales (filtrar las que no se quieren mostrar)
         columnas = list(rows_dict[0].keys())
         columnas_finales = [c for c in columnas if c not in ["día", "mes", "año_1", "hombre", "mujer"]]
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
@@ -350,15 +377,24 @@ def exportar():
         logger.info(f"📝 SQL export: {sql}")
         
         result = client.execute(sql, parametros)
-        if hasattr(result, 'rows') and callable(result.rows):
-            rows = result.rows()
-            columns = result.columns() if hasattr(result, 'columns') and callable(result.columns) else []
+        
+        # Obtener columnas reales
+        columns = []
+        if hasattr(result, 'description') and result.description:
+            columns = [col[0] for col in result.description]
+        elif hasattr(result, 'columns') and callable(result.columns):
+            columns = result.columns()
         else:
             rows = result if isinstance(result, list) else list(result)
             if rows and isinstance(rows[0], dict):
                 columns = list(rows[0].keys())
             else:
                 columns = [f"col_{i}" for i in range(len(rows[0]))] if rows else []
+        
+        if hasattr(result, 'rows') and callable(result.rows):
+            rows = result.rows()
+        else:
+            rows = result if isinstance(result, list) else list(result)
         
         rows_dict = [dict(zip(columns, row)) for row in rows] if columns else []
         
