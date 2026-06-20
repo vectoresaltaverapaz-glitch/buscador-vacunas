@@ -8,20 +8,11 @@ import libsql_client
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
-# Configurar logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# ==================================================
-# APP
-# ==================================================
-
 app = Flask(__name__)
 auth = HTTPBasicAuth()
-
-# ==================================================
-# USUARIOS
-# ==================================================
 
 USUARIOS = {
     "admin": "vacunas2025",
@@ -32,24 +23,14 @@ USUARIOS = {
 def verify_password(usuario, password):
     return usuario in USUARIOS and USUARIOS[usuario] == password
 
-# ==================================================
-# TURSO - CONEXIÓN CON libsql-client
-# ==================================================
-
 def get_turso_client():
     url = os.getenv("TURSO_URL")
     token = os.getenv("TURSO_TOKEN")
-    
     if not url or not token:
-        logger.error("❌ Variables de entorno TURSO_URL o TURSO_TOKEN no están definidas")
-        raise Exception("Faltan variables de entorno TURSO_URL o TURSO_TOKEN")
-    
+        logger.error("❌ Faltan variables de entorno TURSO_URL o TURSO_TOKEN")
+        raise Exception("Faltan variables de entorno")
     logger.info(f"✅ Conectando a Turso: {url}")
     return libsql_client.create_client_sync(url=url, auth_token=token)
-
-# ==================================================
-# RENOMBRES (se mantiene igual)
-# ==================================================
 
 RENOMBRES = {
     "rowid": "ID",
@@ -114,10 +95,6 @@ RENOMBRES = {
     "3a..": "Dosis 3"
 }
 
-# ==================================================
-# COLUMNAS FECHA
-# ==================================================
-
 COLUMNAS_FECHA = {
     "hep._b", "bcg", "1a._(fipv)", "2a._(fipv)", "1a._(ipv)",
     "1a._(historico)", "2a._(opv)", "3a._(opv)",
@@ -139,10 +116,6 @@ COLUMNAS_FECHA = {
     "spr_1.1", "spr_2.1",
     "1a..7", "2a..7", "3a.."
 }
-
-# ==================================================
-# FUNCIONES
-# ==================================================
 
 def limpiar_numero(valor):
     try:
@@ -172,10 +145,6 @@ def procesar_valor(columna, valor):
     if columna in COLUMNAS_FECHA:
         return convertir_fecha_excel(valor)
     return limpiar_numero(valor)
-
-# ==================================================
-# HTML
-# ==================================================
 
 HTML = """
 <!DOCTYPE html>
@@ -254,18 +223,10 @@ function exportarExcel(){
 </html>
 """
 
-# ==================================================
-# RUTAS
-# ==================================================
-
 @app.route('/')
 @auth.login_required
 def index():
     return render_template_string(HTML)
-
-# ==================================================
-# BUSQUEDA - CORREGIDA FINAL
-# ==================================================
 
 @app.route('/buscar')
 @auth.login_required
@@ -275,10 +236,9 @@ def buscar():
     distrito = request.args.get('distrito', '').strip()
     
     logger.info(f"🔍 Búsqueda: query='{query}', tipo='{tipo}', distrito='{distrito}'")
-
+    
     try:
         client = get_turso_client()
-
         mapa = {
             "nombre_nino": "nombre_de_la_niña_o_del_niño",
             "nombre_responsable": "nombre_de_la_madre_padre_o_responsable",
@@ -287,10 +247,9 @@ def buscar():
         }
         columna = mapa[tipo]
         logger.info(f"📌 Columna mapeada: '{columna}'")
-
+        
         condiciones = []
         parametros = []
-
         if query:
             if "cui" in tipo:
                 condiciones.append(f'"{columna}" = ?')
@@ -301,7 +260,7 @@ def buscar():
         if distrito:
             condiciones.append('UPPER("distrito") LIKE ?')
             parametros.append(f"%{distrito.upper()}%")
-
+        
         where = " AND ".join(condiciones) if condiciones else ""
         sql = f"""
         SELECT rowid,* FROM datos_completos
@@ -310,60 +269,52 @@ def buscar():
         """
         logger.info(f"📝 SQL: {sql}")
         logger.info(f"📦 Parámetros: {parametros}")
-
-        # EJECUCIÓN CON libsql-client
+        
+        # Ejecutar consulta y manejar el resultado de forma robusta
         result = client.execute(sql, parametros)
-
-        # La API de libsql-client puede devolver un objeto ResultSet o una lista directamente
-        # Verificamos y extraemos filas y nombres de columna
+        
+        # Verificar si result es un objeto ResultSet o una lista
         if hasattr(result, 'rows') and callable(result.rows):
-            # Si tiene método rows() (caso típico con libsql://)
             rows = result.rows()
-            columns = result.columns() if hasattr(result, 'columns') else []
+            columns = result.columns() if hasattr(result, 'columns') and callable(result.columns) else []
             logger.info(f"📋 Columnas (desde ResultSet): {columns}")
         else:
-            # Si result ya es una lista de filas (con HTTPS)
+            # Si es lista, ya está
             rows = result if isinstance(result, list) else list(result)
-            # Extraer nombres de columna desde la primera fila si es un diccionario
+            # Si la primera fila es un diccionario, extraer columnas
             if rows and isinstance(rows[0], dict):
                 columns = list(rows[0].keys())
             else:
-                # Si no tenemos columnas, intentamos obtener de la consulta
-                # Para evitar errores, usamos un fallback
+                # Fallback: nombres genéricos
                 columns = [f"col_{i}" for i in range(len(rows[0]))] if rows else []
             logger.info(f"📋 Columnas (deducidas): {columns}")
-
+        
         logger.info(f"📊 Filas obtenidas: {len(rows)}")
-
+        
         # Convertir a lista de diccionarios
         rows_dict = [dict(zip(columns, row)) for row in rows] if columns else []
-
+        
         client.close()
-
+        
         if not rows_dict:
             logger.warning("⚠️ No se encontraron resultados")
             return jsonify({"rows": [], "columnas": [], "total": 0})
-
+        
         # Procesar columnas finales
         columnas = list(rows_dict[0].keys())
         columnas_finales = [c for c in columnas if c not in ["día", "mes", "año_1", "hombre", "mujer"]]
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
-
+        
         resultados = []
         for row in rows_dict:
             fila = [procesar_valor(c, row.get(c)) for c in columnas_finales]
             resultados.append(fila)
-
+        
         logger.info(f"✅ Resultados devueltos: {len(resultados)}")
         return jsonify({"rows": resultados, "columnas": titulos_columnas, "total": len(resultados)})
-
     except Exception as e:
         logger.error(f"❌ Error en /buscar: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
-
-# ==================================================
-# EXPORTAR - CORREGIDA FINAL
-# ==================================================
 
 @app.route('/exportar')
 @auth.login_required
@@ -372,11 +323,8 @@ def exportar():
     tipo = request.args.get('tipo', 'nombre_nino')
     distrito = request.args.get('distrito', '').strip()
     
-    logger.info(f"📤 Exportando: query='{query}', tipo='{tipo}', distrito='{distrito}'")
-
     try:
         client = get_turso_client()
-
         mapa = {
             "nombre_nino": "nombre_de_la_niña_o_del_niño",
             "nombre_responsable": "nombre_de_la_madre_padre_o_responsable",
@@ -384,10 +332,8 @@ def exportar():
             "cui_responsable": "cui"
         }
         columna = mapa[tipo]
-
         condiciones = []
         parametros = []
-
         if query:
             if "cui" in tipo:
                 condiciones.append(f'"{columna}" = ?')
@@ -398,64 +344,53 @@ def exportar():
         if distrito:
             condiciones.append('UPPER("distrito") LIKE ?')
             parametros.append(f"%{distrito.upper()}%")
-
+        
         where = " AND ".join(condiciones) if condiciones else ""
         sql = f"SELECT rowid,* FROM datos_completos {f'WHERE {where}' if where else ''}"
         logger.info(f"📝 SQL export: {sql}")
-
+        
         result = client.execute(sql, parametros)
-
-        # Manejar resultado de forma robusta (igual que en buscar)
         if hasattr(result, 'rows') and callable(result.rows):
             rows = result.rows()
-            columns = result.columns() if hasattr(result, 'columns') else []
+            columns = result.columns() if hasattr(result, 'columns') and callable(result.columns) else []
         else:
             rows = result if isinstance(result, list) else list(result)
             if rows and isinstance(rows[0], dict):
                 columns = list(rows[0].keys())
             else:
                 columns = [f"col_{i}" for i in range(len(rows[0]))] if rows else []
-
+        
         rows_dict = [dict(zip(columns, row)) for row in rows] if columns else []
-
+        
         wb = Workbook()
         ws = wb.active
         ws.title = "Resultados"
-
+        
         if rows_dict:
             columnas = list(rows_dict[0].keys())
             columnas_finales = [c for c in columnas if c not in ["día", "mes", "año_1", "hombre", "mujer"]]
             titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
-
             ws.append(titulos_columnas)
             for cell in ws[1]:
                 cell.font = Font(bold=True, color="FFFFFF")
                 cell.fill = PatternFill(start_color="1e466e", end_color="1e466e", fill_type="solid")
                 cell.alignment = Alignment(horizontal="center")
-
             for row in rows_dict:
                 fila = [procesar_valor(c, row.get(c)) for c in columnas_finales]
                 ws.append(fila)
-
+        
         output = BytesIO()
         wb.save(output)
         output.seek(0)
-
         client.close()
-
         return Response(
             output.getvalue(),
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             headers={'Content-Disposition': 'attachment; filename=resultados.xlsx'}
         )
-
     except Exception as e:
         logger.error(f"❌ Error en /exportar: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
-
-# ==================================================
-# INICIO
-# ==================================================
 
 if __name__ == '__main__':
     logger.info("🚀 Servidor iniciado...")
