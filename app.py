@@ -33,7 +33,7 @@ def verify_password(usuario, password):
     return usuario in USUARIOS and USUARIOS[usuario] == password
 
 # ==================================================
-# TURSO - CONEXIÓN CON libsql-client (VERSIÓN HTTP)
+# TURSO - CONEXIÓN CON libsql-client
 # ==================================================
 
 def get_turso_client():
@@ -174,7 +174,7 @@ def procesar_valor(columna, valor):
     return limpiar_numero(valor)
 
 # ==================================================
-# HTML (se mantiene igual)
+# HTML
 # ==================================================
 
 HTML = """
@@ -264,7 +264,7 @@ def index():
     return render_template_string(HTML)
 
 # ==================================================
-# BUSQUEDA - CORREGIDA CON API DE libsql-client
+# BUSQUEDA - CORREGIDA FINAL
 # ==================================================
 
 @app.route('/buscar')
@@ -311,28 +311,32 @@ def buscar():
         logger.info(f"📝 SQL: {sql}")
         logger.info(f"📦 Parámetros: {parametros}")
 
-        # CORRECCIÓN: Obtener filas correctamente
+        # EJECUCIÓN CON libsql-client
         result = client.execute(sql, parametros)
-        
-        # Verificar método de obtención de filas
-        if hasattr(result, 'rows'):
-            rows = result.rows()
-        else:
-            # Fallback si no tiene rows()
-            rows = result.fetchall() if hasattr(result, 'fetchall') else []
-        
-        logger.info(f"📊 Filas obtenidas: {len(rows)}")
-        
-        # Obtener nombres de columna
-        if hasattr(result, 'columns'):
-            col_names = result.columns()
-        else:
-            # Fallback con description
-            col_names = [desc[0] for desc in result.description] if hasattr(result, 'description') else []
-        
-        logger.info(f"📋 Columnas: {col_names}")
 
-        rows_dict = [dict(zip(col_names, row)) for row in rows]
+        # La API de libsql-client puede devolver un objeto ResultSet o una lista directamente
+        # Verificamos y extraemos filas y nombres de columna
+        if hasattr(result, 'rows') and callable(result.rows):
+            # Si tiene método rows() (caso típico con libsql://)
+            rows = result.rows()
+            columns = result.columns() if hasattr(result, 'columns') else []
+            logger.info(f"📋 Columnas (desde ResultSet): {columns}")
+        else:
+            # Si result ya es una lista de filas (con HTTPS)
+            rows = result if isinstance(result, list) else list(result)
+            # Extraer nombres de columna desde la primera fila si es un diccionario
+            if rows and isinstance(rows[0], dict):
+                columns = list(rows[0].keys())
+            else:
+                # Si no tenemos columnas, intentamos obtener de la consulta
+                # Para evitar errores, usamos un fallback
+                columns = [f"col_{i}" for i in range(len(rows[0]))] if rows else []
+            logger.info(f"📋 Columnas (deducidas): {columns}")
+
+        logger.info(f"📊 Filas obtenidas: {len(rows)}")
+
+        # Convertir a lista de diccionarios
+        rows_dict = [dict(zip(columns, row)) for row in rows] if columns else []
 
         client.close()
 
@@ -340,6 +344,7 @@ def buscar():
             logger.warning("⚠️ No se encontraron resultados")
             return jsonify({"rows": [], "columnas": [], "total": 0})
 
+        # Procesar columnas finales
         columnas = list(rows_dict[0].keys())
         columnas_finales = [c for c in columnas if c not in ["día", "mes", "año_1", "hombre", "mujer"]]
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
@@ -357,7 +362,7 @@ def buscar():
         return jsonify({"error": str(e)}), 500
 
 # ==================================================
-# EXPORTAR - CORREGIDA CON API DE libsql-client
+# EXPORTAR - CORREGIDA FINAL
 # ==================================================
 
 @app.route('/exportar')
@@ -399,22 +404,19 @@ def exportar():
         logger.info(f"📝 SQL export: {sql}")
 
         result = client.execute(sql, parametros)
-        
-        # Obtener filas correctamente
-        if hasattr(result, 'rows'):
+
+        # Manejar resultado de forma robusta (igual que en buscar)
+        if hasattr(result, 'rows') and callable(result.rows):
             rows = result.rows()
+            columns = result.columns() if hasattr(result, 'columns') else []
         else:
-            rows = result.fetchall() if hasattr(result, 'fetchall') else []
-        
-        if rows:
-            if hasattr(result, 'columns'):
-                col_names = result.columns()
+            rows = result if isinstance(result, list) else list(result)
+            if rows and isinstance(rows[0], dict):
+                columns = list(rows[0].keys())
             else:
-                col_names = [desc[0] for desc in result.description] if hasattr(result, 'description') else []
-        else:
-            col_names = []
-        
-        rows_dict = [dict(zip(col_names, row)) for row in rows]
+                columns = [f"col_{i}" for i in range(len(rows[0]))] if rows else []
+
+        rows_dict = [dict(zip(columns, row)) for row in rows] if columns else []
 
         wb = Workbook()
         ws = wb.active
