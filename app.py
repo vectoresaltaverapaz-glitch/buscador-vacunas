@@ -8,7 +8,6 @@ import libsql_client
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
-# Configurar logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ def get_turso_client():
     return libsql_client.create_client_sync(url=url, auth_token=token)
 
 # ==================================================
-# RENOMBRES Y COLUMNAS FECHA (igual que antes)
+# RENOMBRES Y COLUMNAS FECHA
 # ==================================================
 
 RENOMBRES = {
@@ -122,10 +121,6 @@ COLUMNAS_FECHA = {
     "1a..7", "2a..7", "3a.."
 }
 
-# ==================================================
-# FUNCIONES DE PROCESAMIENTO
-# ==================================================
-
 def limpiar_numero(valor):
     try:
         if valor is None:
@@ -154,10 +149,6 @@ def procesar_valor(columna, valor):
     if columna in COLUMNAS_FECHA:
         return convertir_fecha_excel(valor)
     return limpiar_numero(valor)
-
-# ==================================================
-# HTML (igual)
-# ==================================================
 
 HTML = """
 <!DOCTYPE html>
@@ -236,10 +227,6 @@ function exportarExcel(){
 </html>
 """
 
-# ==================================================
-# RUTAS
-# ==================================================
-
 @app.route('/')
 @auth.login_required
 def index():
@@ -279,34 +266,34 @@ def buscar():
             parametros.append(f"%{distrito.upper()}%")
         
         where = " AND ".join(condiciones) if condiciones else ""
-        # Reducir límite para evitar timeout (de 300 a 150)
+        # Reducir a 30 filas para evitar timeout
         sql = f"""
         SELECT rowid,* FROM datos_completos
         {f'WHERE {where}' if where else ''}
-        LIMIT 150
+        LIMIT 30
         """
         logger.info(f"📝 SQL: {sql}")
         logger.info(f"📦 Parámetros: {parametros}")
         
         result = client.execute(sql, parametros)
         
-        # OBTENER NOMBRES DE COLUMNA REALES
-        # Intenta obtener desde result.description (libsql_client)
+        # Obtener nombres de columna reales desde result.description
         columns = []
         if hasattr(result, 'description') and result.description:
-            columns = [col[0] for col in result.description]  # description es lista de tuplas
+            # description es una lista de tuplas (nombre, tipo, ...)
+            columns = [col[0] for col in result.description]
             logger.info(f"📋 Columnas desde description: {columns}")
         elif hasattr(result, 'columns') and callable(result.columns):
             columns = result.columns()
             logger.info(f"📋 Columnas desde columns(): {columns}")
         else:
-            # Fallback: si result es una lista de filas y primera es dict
+            # Si no hay description, intentar obtener desde las filas si son diccionarios
             rows = result if isinstance(result, list) else list(result)
             if rows and isinstance(rows[0], dict):
                 columns = list(rows[0].keys())
-                logger.info(f"📋 Columnas desde dict keys: {columns}")
+                logger.info(f"📋 Columnas desde dict: {columns}")
             else:
-                # Si no hay columnas, crear genéricas
+                # Fallback: nombres genéricos
                 columns = [f"col_{i}" for i in range(len(rows[0]))] if rows else []
                 logger.info(f"📋 Columnas genéricas: {columns}")
         
@@ -318,7 +305,7 @@ def buscar():
         
         logger.info(f"📊 Filas obtenidas: {len(rows)}")
         
-        # Convertir a lista de diccionarios
+        # Convertir a diccionarios
         rows_dict = [dict(zip(columns, row)) for row in rows] if columns else []
         
         client.close()
@@ -327,7 +314,7 @@ def buscar():
             logger.warning("⚠️ No se encontraron resultados")
             return jsonify({"rows": [], "columnas": [], "total": 0})
         
-        # Procesar columnas finales (filtrar las que no se quieren mostrar)
+        # Procesar columnas finales
         columnas = list(rows_dict[0].keys())
         columnas_finales = [c for c in columnas if c not in ["día", "mes", "año_1", "hombre", "mujer"]]
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
@@ -377,8 +364,6 @@ def exportar():
         logger.info(f"📝 SQL export: {sql}")
         
         result = client.execute(sql, parametros)
-        
-        # Obtener columnas reales
         columns = []
         if hasattr(result, 'description') and result.description:
             columns = [col[0] for col in result.description]
