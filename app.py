@@ -158,7 +158,7 @@ COLUMNAS_EXCLUIDAS = [
     "departamento.1", "municipio.1", "comunidad.1",
     "comunidad.2", "calle,_avenida,_zona,_lote,",
     "día", "mes", "año_1", "día.1", "mes.1", "año.1",
-    "hombre", "mujer"  # Estas se reemplazan por "genero"
+    "hombre", "mujer"
 ]
 
 # ==================================================
@@ -220,6 +220,8 @@ body{ font-family:Arial; background:#eef2f7; padding:20px; }
 .container{ background:white; padding:20px; border-radius:10px; }
 input,select,button{ padding:10px; margin:5px; }
 .filtros{ margin-bottom:15px; }
+.filtros select, .filtros input{ margin-bottom:5px; }
+.botones{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
 table{ width:100%; border-collapse:collapse; margin-top:20px; font-size:12px; }
 th,td{ border:1px solid #ccc; padding:5px; }
 th{ background:#1e466e; color:white; position:sticky; top:0; }
@@ -230,38 +232,47 @@ th{ background:#1e466e; color:white; position:sticky; top:0; }
 <h2>🔍 Buscador SIGSA</h2>
 
 <div class="filtros">
-    <select id="distrito">
-        <option value="">TODOS LOS DISTRITOS</option>
-        <option value="COBAN">COBAN</option>
-        <option value="SAN PEDRO CARCHA">SAN PEDRO CARCHA</option>
-        <option value="TACTIC">TACTIC</option>
-        <option value="LANQUIN">LANQUIN</option>
-        <option value="CHISEC">CHISEC</option>
-        <option value="CAHABON">CAHABON</option>
-        <option value="SENAHU">SENAHU</option>
-        <option value="FRAY BARTOLOME">FRAY BARTOLOME</option>
-        <option value="PANZÓS">PANZÓS</option>
-        <option value="SAN JUAN CHAMELCO">SAN JUAN CHAMELCO</option>
-        <option value="TUCURÚ">TUCURÚ</option>
-        <option value="TAMAHÚ">TAMAHÚ</option>
-        <option value="SANTA CRUZ VERAPAZ">SANTA CRUZ VERAPAZ</option>
-        <option value="CAMPUR">CAMPUR</option>
-        <option value="COBÁN">COBÁN</option>
-        <option value="RAXRUHA">RAXRUHA</option>
-        <option value="CHAHAL">CHAHAL</option>
-        <option value="LA TINTA">LA TINTA</option>
-        <option value="TELEMÁN">TELEMÁN</option>
-    </select>
+    <div>
+        <select id="distrito">
+            <option value="">TODOS LOS DISTRITOS</option>
+            <option value="COBAN">COBAN</option>
+            <option value="SAN PEDRO CARCHA">SAN PEDRO CARCHA</option>
+            <option value="TACTIC">TACTIC</option>
+            <option value="LANQUIN">LANQUIN</option>
+            <option value="CHISEC">CHISEC</option>
+            <option value="CAHABON">CAHABON</option>
+            <option value="SENAHU">SENAHU</option>
+            <option value="FRAY BARTOLOME">FRAY BARTOLOME</option>
+            <option value="PANZÓS">PANZÓS</option>
+            <option value="SAN JUAN CHAMELCO">SAN JUAN CHAMELCO</option>
+            <option value="TUCURÚ">TUCURÚ</option>
+            <option value="TAMAHÚ">TAMAHÚ</option>
+            <option value="SANTA CRUZ VERAPAZ">SANTA CRUZ VERAPAZ</option>
+            <option value="CAMPUR">CAMPUR</option>
+            <option value="COBÁN">COBÁN</option>
+            <option value="RAXRUHA">RAXRUHA</option>
+            <option value="CHAHAL">CHAHAL</option>
+            <option value="LA TINTA">LA TINTA</option>
+            <option value="TELEMÁN">TELEMÁN</option>
+        </select>
 
-    <select id="tipo">
-        <option value="nombre_nino">Nombre Niño</option>
-        <option value="nombre_responsable">Nombre Responsable</option>
-        <option value="cui_nino">CUI Niño</option>
-        <option value="cui_responsable">CUI Responsable</option>
-        <option value="servicio">Servicio Salud</option>
-    </select>
+        <select id="tipo">
+            <option value="nombre_nino">Nombre Niño</option>
+            <option value="nombre_responsable">Nombre Responsable</option>
+            <option value="cui_nino">CUI Niño</option>
+            <option value="cui_responsable">CUI Responsable</option>
+            <option value="servicio">Servicio Salud</option>
+        </select>
 
-    <input type="text" id="search" placeholder="Buscar...">
+        <select id="genero">
+            <option value="">Género (todos)</option>
+            <option value="Hombre">Hombre</option>
+            <option value="Mujer">Mujer</option>
+            <option value="No especificado">No especificado</option>
+        </select>
+
+        <input type="text" id="search" placeholder="Buscar..." style="width:200px;">
+    </div>
 
     <div style="margin-top:10px;">
         <label>Fecha Nacimiento Niño:</label>
@@ -275,9 +286,10 @@ th{ background:#1e466e; color:white; position:sticky; top:0; }
         <input type="number" id="ano_madre" placeholder="Año" style="width:80px;">
     </div>
 
-    <div style="margin-top:10px;">
-        <button onclick="buscar()">Buscar</button>
-        <button onclick="exportarExcel()">Exportar Excel</button>
+    <div class="botones" style="margin-top:10px;">
+        <button onclick="buscar()">🔍 Buscar</button>
+        <button onclick="exportarExcel()">📊 Exportar Excel</button>
+        <button onclick="limpiar()" style="background:#e74c3c; color:white; border:none;">🔄 Nueva búsqueda</button>
         <span style="margin-left:15px;font-size:14px;color:#555;">Mostrando hasta 150 registros</span>
     </div>
 </div>
@@ -290,6 +302,7 @@ function buscar(){
     let q = document.getElementById('search').value;
     let tipo = document.getElementById('tipo').value;
     let distrito = document.getElementById('distrito').value;
+    let genero = document.getElementById('genero').value;
     let dia_nac = document.getElementById('dia_nac').value;
     let mes_nac = document.getElementById('mes_nac').value;
     let ano_nac = document.getElementById('ano_nac').value;
@@ -297,7 +310,7 @@ function buscar(){
     let mes_madre = document.getElementById('mes_madre').value;
     let ano_madre = document.getElementById('ano_madre').value;
 
-    let url = `/buscar?q=${encodeURIComponent(q)}&tipo=${tipo}&distrito=${encodeURIComponent(distrito)}`;
+    let url = `/buscar?q=${encodeURIComponent(q)}&tipo=${tipo}&distrito=${encodeURIComponent(distrito)}&genero=${encodeURIComponent(genero)}`;
     if (dia_nac) url += `&dia_nac=${dia_nac}`;
     if (mes_nac) url += `&mes_nac=${mes_nac}`;
     if (ano_nac) url += `&ano_nac=${ano_nac}`;
@@ -335,10 +348,27 @@ function buscar(){
     });
 }
 
+function limpiar(){
+    document.getElementById('search').value = '';
+    document.getElementById('tipo').value = 'nombre_nino';
+    document.getElementById('distrito').value = '';
+    document.getElementById('genero').value = '';
+    document.getElementById('dia_nac').value = '';
+    document.getElementById('mes_nac').value = '';
+    document.getElementById('ano_nac').value = '';
+    document.getElementById('dia_madre').value = '';
+    document.getElementById('mes_madre').value = '';
+    document.getElementById('ano_madre').value = '';
+    document.getElementById('resultado').innerHTML = '';
+    // Opcional: auto-buscar después de limpiar para mostrar todo
+    buscar();
+}
+
 function exportarExcel(){
     let q = document.getElementById('search').value;
     let tipo = document.getElementById('tipo').value;
     let distrito = document.getElementById('distrito').value;
+    let genero = document.getElementById('genero').value;
     let dia_nac = document.getElementById('dia_nac').value;
     let mes_nac = document.getElementById('mes_nac').value;
     let ano_nac = document.getElementById('ano_nac').value;
@@ -346,7 +376,7 @@ function exportarExcel(){
     let mes_madre = document.getElementById('mes_madre').value;
     let ano_madre = document.getElementById('ano_madre').value;
 
-    let url = `/exportar?q=${encodeURIComponent(q)}&tipo=${tipo}&distrito=${encodeURIComponent(distrito)}`;
+    let url = `/exportar?q=${encodeURIComponent(q)}&tipo=${tipo}&distrito=${encodeURIComponent(distrito)}&genero=${encodeURIComponent(genero)}`;
     if (dia_nac) url += `&dia_nac=${dia_nac}`;
     if (mes_nac) url += `&mes_nac=${mes_nac}`;
     if (ano_nac) url += `&ano_nac=${ano_nac}`;
@@ -376,6 +406,7 @@ def buscar():
     query = request.args.get('q', '').strip()
     tipo = request.args.get('tipo', 'nombre_nino')
     distrito = request.args.get('distrito', '').strip()
+    genero = request.args.get('genero', '').strip()
     dia_nac = request.args.get('dia_nac', '').strip()
     mes_nac = request.args.get('mes_nac', '').strip()
     ano_nac = request.args.get('ano_nac', '').strip()
@@ -383,7 +414,7 @@ def buscar():
     mes_madre = request.args.get('mes_madre', '').strip()
     ano_madre = request.args.get('ano_madre', '').strip()
     
-    logger.info(f"🔍 Búsqueda: query='{query}', tipo='{tipo}', distrito='{distrito}'")
+    logger.info(f"🔍 Búsqueda: query='{query}', tipo='{tipo}', distrito='{distrito}', genero='{genero}'")
     
     try:
         client = get_turso_client()
@@ -414,6 +445,17 @@ def buscar():
         if distrito:
             condiciones.append('UPPER("distrito") LIKE ?')
             parametros.append(f"%{distrito.upper()}%")
+        
+        # Filtro por género (usamos la columna calculada en el WHERE con una subconsulta o CASE)
+        # Como "genero" no es una columna real, filtramos por las columnas reales 'hombre' y 'mujer'
+        if genero:
+            if genero == "Hombre":
+                condiciones.append('"hombre" = "X"')
+            elif genero == "Mujer":
+                condiciones.append('"mujer" = "X"')
+            elif genero == "No especificado":
+                condiciones.append('"hombre" != "X" AND "mujer" != "X"')
+            # Si es "Todos" o vacío, no filtramos
         
         # Filtro por fecha de nacimiento del niño
         if dia_nac:
@@ -466,7 +508,6 @@ def buscar():
         
         # Definir columnas a mostrar: las columnas reales excluyendo las excluidas y añadiendo "genero"
         columnas_finales = [c for c in COLUMNAS_REALES if c not in COLUMNAS_EXCLUIDAS]
-        # Agregar "genero" al final (o donde quieras)
         columnas_finales.append("genero")
         
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
@@ -505,6 +546,7 @@ def exportar():
     query = request.args.get('q', '').strip()
     tipo = request.args.get('tipo', 'nombre_nino')
     distrito = request.args.get('distrito', '').strip()
+    genero = request.args.get('genero', '').strip()
     dia_nac = request.args.get('dia_nac', '').strip()
     mes_nac = request.args.get('mes_nac', '').strip()
     ano_nac = request.args.get('ano_nac', '').strip()
@@ -538,6 +580,14 @@ def exportar():
         if distrito:
             condiciones.append('UPPER("distrito") LIKE ?')
             parametros.append(f"%{distrito.upper()}%")
+        
+        if genero:
+            if genero == "Hombre":
+                condiciones.append('"hombre" = "X"')
+            elif genero == "Mujer":
+                condiciones.append('"mujer" = "X"')
+            elif genero == "No especificado":
+                condiciones.append('"hombre" != "X" AND "mujer" != "X"')
         
         if dia_nac:
             condiciones.append('"día" = ?')
