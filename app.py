@@ -195,7 +195,6 @@ def procesar_valor(columna, valor):
     return limpiar_numero(valor)
 
 def obtener_genero(row):
-    """Determina el género basado en las columnas 'hombre' y 'mujer'."""
     hombre = row.get("hombre")
     mujer = row.get("mujer")
     if hombre == 'X':
@@ -225,6 +224,21 @@ input,select,button{ padding:10px; margin:5px; }
 table{ width:100%; border-collapse:collapse; margin-top:20px; font-size:12px; }
 th,td{ border:1px solid #ccc; padding:5px; }
 th{ background:#1e466e; color:white; position:sticky; top:0; }
+
+.spinner {
+    display: none;
+    border: 6px solid #f3f3f3;
+    border-top: 6px solid #1e466e;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    margin: 20px auto;
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
 </style>
 </head>
 <body>
@@ -287,18 +301,23 @@ th{ background:#1e466e; color:white; position:sticky; top:0; }
     </div>
 
     <div class="botones" style="margin-top:10px;">
-        <button onclick="buscar()">🔍 Buscar</button>
+        <button id="btnBuscar" onclick="buscar()">🔍 Buscar</button>
         <button onclick="exportarExcel()">📊 Exportar Excel</button>
         <button onclick="limpiar()" style="background:#e74c3c; color:white; border:none;">🔄 Nueva búsqueda</button>
-        <span style="margin-left:15px;font-size:14px;color:#555;">Mostrando hasta 150 registros</span>
+        <span style="margin-left:15px;font-size:14px;color:#555;">Mostrando hasta 50 registros</span>
     </div>
 </div>
 
 <div id="resultado"></div>
+<div class="spinner" id="spinner"></div>
 </div>
 
 <script>
 function buscar(){
+    document.getElementById('spinner').style.display = 'block';
+    document.getElementById('btnBuscar').disabled = true;
+    document.getElementById('resultado').innerHTML = '';
+
     let q = document.getElementById('search').value;
     let tipo = document.getElementById('tipo').value;
     let distrito = document.getElementById('distrito').value;
@@ -321,6 +340,9 @@ function buscar(){
     fetch(url)
     .then(r => r.json())
     .then(data => {
+        document.getElementById('spinner').style.display = 'none';
+        document.getElementById('btnBuscar').disabled = false;
+
         if (data.error) {
             document.getElementById('resultado').innerHTML = `<p style="color:red;">❌ Error: ${data.error}</p>`;
             return;
@@ -344,6 +366,8 @@ function buscar(){
         document.getElementById('resultado').innerHTML = html;
     })
     .catch(err => {
+        document.getElementById('spinner').style.display = 'none';
+        document.getElementById('btnBuscar').disabled = false;
         document.getElementById('resultado').innerHTML = `<p style="color:red;">❌ Error: ${err}</p>`;
     });
 }
@@ -360,7 +384,8 @@ function limpiar(){
     document.getElementById('mes_madre').value = '';
     document.getElementById('ano_madre').value = '';
     document.getElementById('resultado').innerHTML = '';
-    // Opcional: auto-buscar después de limpiar para mostrar todo
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('btnBuscar').disabled = false;
     buscar();
 }
 
@@ -400,6 +425,10 @@ function exportarExcel(){
 def index():
     return render_template_string(HTML)
 
+# ==================================================
+# BUSCAR CON FTS (Full-Text Search)
+# ==================================================
+
 @app.route('/buscar')
 @auth.login_required
 def buscar():
@@ -419,26 +448,59 @@ def buscar():
     try:
         client = get_turso_client()
         
-        mapa = {
-            "nombre_nino": "nombre_nino",
-            "nombre_responsable": "nombre_responsable",
-            "cui_nino": "cui_nino",
-            "cui_responsable": "cui_responsable",
-            "servicio": "servicio"
-        }
-        columna_busqueda = mapa.get(tipo, "nombre_nino")
-        logger.info(f"📌 Columna de búsqueda: '{columna_busqueda}'")
+        # --- 1. FTS para búsqueda de texto ---
+        fts_condition = ""
+        fts_params = []
         
+        if query:
+            # Buscar en la tabla FTS
+            if tipo == "nombre_nino":
+                # La tabla fts_data tiene la columna 'nombre'
+                fts_query = f"{query}*"
+                fts_sql = f"""
+                    SELECT rowid FROM fts_data 
+                    WHERE nombre MATCH ? 
+                    ORDER BY rank
+                    LIMIT 100
+                """
+                fts_result = client.execute(fts_sql, [fts_query])
+                fts_rows = fts_result.rows() if hasattr(fts_result, 'rows') and callable(fts_result.rows) else list(fts_result)
+                
+                if fts_rows:
+                    # Obtener los rowid de los resultados FTS
+                    rowids = [str(row[0]) for row in fts_rows]
+                    fts_condition = f'"rowid" IN ({",".join(rowids)})'
+                    logger.info(f"🔍 FTS encontró {len(rowids)} filas")
+                else:
+                    client.close()
+                    return jsonify({"rows": [], "columnas": [], "total": 0})
+            
+            elif tipo == "nombre_responsable":
+                # Similar pero para responsable (no hay FTS directo, usamos LIKE pero con FTS de nombre? 
+                # Para simplificar, usamos LIKE en responsable pero con índice limitado)
+                fts_condition = f'"nombre_responsable" LIKE ?'
+                fts_params.append(f"%{query}%")
+        
+        # --- 2. Construir condiciones adicionales ---
         condiciones = []
         parametros = []
         
-        # Búsqueda por texto
-        if query:
-            if "cui" in tipo:
-                condiciones.append(f'"{columna_busqueda}" = ?')
+        # Si no hay FTS y hay query, usar LIKE en la columna correspondiente
+        if query and not fts_condition:
+            if tipo == "nombre_nino":
+                condiciones.append('"nombre_nino" LIKE ?')
+                parametros.append(f"%{query}%")
+            elif tipo == "nombre_responsable":
+                condiciones.append('"nombre_responsable" LIKE ?')
+                parametros.append(f"%{query}%")
+            elif tipo == "cui_nino":
+                condiciones.append('"cui_nino" = ?')
                 parametros.append(query)
-            else:
-                condiciones.append(f'"{columna_busqueda}" LIKE ?')
+            elif tipo == "cui_responsable":
+                condiciones.append('"cui_responsable" = ?')
+                parametros.append(query)
+            elif tipo == "servicio":
+                condiciones.append('"servicio" LIKE ?')
                 parametros.append(f"%{query}%")
         
         # Filtro por distrito
@@ -446,8 +508,7 @@ def buscar():
             condiciones.append('UPPER("distrito") LIKE ?')
             parametros.append(f"%{distrito.upper()}%")
         
-        # Filtro por género (usamos la columna calculada en el WHERE con una subconsulta o CASE)
-        # Como "genero" no es una columna real, filtramos por las columnas reales 'hombre' y 'mujer'
+        # Filtro por género
         if genero:
             if genero == "Hombre":
                 condiciones.append('"hombre" = "X"')
@@ -455,7 +516,6 @@ def buscar():
                 condiciones.append('"mujer" = "X"')
             elif genero == "No especificado":
                 condiciones.append('"hombre" != "X" AND "mujer" != "X"')
-            # Si es "Todos" o vacío, no filtramos
         
         # Filtro por fecha de nacimiento del niño
         if dia_nac:
@@ -479,16 +539,24 @@ def buscar():
             condiciones.append('"año.1" = ?')
             parametros.append(ano_madre)
         
-        where = " AND ".join(condiciones) if condiciones else ""
+        # --- 3. Construir SQL final ---
+        where_parts = []
+        if fts_condition:
+            where_parts.append(fts_condition)
+        where_parts.extend(condiciones)
+        
+        where = " AND ".join(where_parts) if where_parts else ""
+        all_params = fts_params + parametros
+        
         sql = f"""
         SELECT * FROM datos_completos
         {f'WHERE {where}' if where else ''}
-        LIMIT 150
+        LIMIT 50
         """
         logger.info(f"📝 SQL: {sql}")
-        logger.info(f"📦 Parámetros: {parametros}")
+        logger.info(f"📦 Parámetros: {all_params}")
         
-        result = client.execute(sql, parametros)
+        result = client.execute(sql, all_params)
         if hasattr(result, 'rows') and callable(result.rows):
             rows = result.rows()
         else:
@@ -502,14 +570,11 @@ def buscar():
         
         rows_dict = [dict(zip(COLUMNAS_REALES, row)) for row in rows]
         
-        # Calcular género para cada fila
         for row in rows_dict:
             row["genero"] = obtener_genero(row)
         
-        # Definir columnas a mostrar: las columnas reales excluyendo las excluidas y añadiendo "genero"
         columnas_finales = [c for c in COLUMNAS_REALES if c not in COLUMNAS_EXCLUIDAS]
         columnas_finales.append("genero")
-        
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
         
         resultados = []
@@ -557,24 +622,24 @@ def exportar():
     try:
         client = get_turso_client()
         
-        mapa = {
-            "nombre_nino": "nombre_nino",
-            "nombre_responsable": "nombre_responsable",
-            "cui_nino": "cui_nino",
-            "cui_responsable": "cui_responsable",
-            "servicio": "servicio"
-        }
-        columna_busqueda = mapa.get(tipo, "nombre_nino")
-        
         condiciones = []
         parametros = []
         
         if query:
-            if "cui" in tipo:
-                condiciones.append(f'"{columna_busqueda}" = ?')
+            if tipo == "nombre_nino":
+                condiciones.append('"nombre_nino" LIKE ?')
+                parametros.append(f"%{query}%")
+            elif tipo == "nombre_responsable":
+                condiciones.append('"nombre_responsable" LIKE ?')
+                parametros.append(f"%{query}%")
+            elif tipo == "cui_nino":
+                condiciones.append('"cui_nino" = ?')
                 parametros.append(query)
-            else:
-                condiciones.append(f'"{columna_busqueda}" LIKE ?')
+            elif tipo == "cui_responsable":
+                condiciones.append('"cui_responsable" = ?')
+                parametros.append(query)
+            elif tipo == "servicio":
+                condiciones.append('"servicio" LIKE ?')
                 parametros.append(f"%{query}%")
         
         if distrito:
@@ -640,7 +705,6 @@ def exportar():
         
         rows_dict = [dict(zip(COLUMNAS_REALES, row)) for row in rows]
         
-        # Calcular género
         for row in rows_dict:
             row["genero"] = obtener_genero(row)
         
@@ -648,7 +712,6 @@ def exportar():
         ws = wb.active
         ws.title = "Resultados"
         
-        # Definir columnas a mostrar
         columnas_finales = [c for c in COLUMNAS_REALES if c not in COLUMNAS_EXCLUIDAS]
         columnas_finales.append("genero")
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
