@@ -34,7 +34,7 @@ def get_turso_client():
     return libsql_client.create_client_sync(url=url, auth_token=token)
 
 # ==================================================
-# RENOMBRES (nombre original de columna → título bonito)
+# RENOMBRES (nombre actual en BD → título bonito)
 # ==================================================
 
 RENOMBRES = {
@@ -46,13 +46,13 @@ RENOMBRES = {
     "servicio": "Servicio Salud",
     "departamento": "Departamento",
     "municipio": "Municipio",
-    "código_único_de_identificación": "CUI Niño",
-    "nombre_de_la_niña_o_del_niño": "Nombre Niño",
-    "cui": "CUI Responsable",
-    "nombre_de_la_madre_padre_o_responsable": "Nombre Responsable",
-    "teléfono": "Teléfono",
+    "cui_nino": "CUI Niño",
+    "nombre_nino": "Nombre Niño",
+    "cui_responsable": "CUI Responsable",
+    "nombre_responsable": "Nombre Responsable",
+    "telefono": "Teléfono",
     "falleció": "Falleció",
-    # Vacunas con rangos de edad
+    # Vacunas (mantienen los nombres originales porque no se renombraron)
     "hep._b": "Hepatitis B (<1 año)",
     "bcg": "BCG (<1 año)",
     "1a._(fipv)": "Polio 1 (<1 año)",
@@ -102,7 +102,7 @@ RENOMBRES = {
 }
 
 # ==================================================
-# COLUMNAS FECHA (nombres originales que deben formatearse como fecha)
+# COLUMNAS FECHA (nombres actuales en BD)
 # ==================================================
 
 COLUMNAS_FECHA = {
@@ -162,26 +162,7 @@ def procesar_valor(columna, valor):
     return limpiar_numero(valor)
 
 # ==================================================
-# OBTENER NOMBRES DE COLUMNA DESDE LA BASE DE DATOS
-# ==================================================
-
-def get_column_names(client, table_name="datos_completos"):
-    """Obtiene los nombres de columna reales usando PRAGMA table_info"""
-    try:
-        pragma_sql = f"PRAGMA table_info({table_name})"
-        result = client.execute(pragma_sql)
-        if hasattr(result, 'rows') and callable(result.rows):
-            rows = result.rows()
-        else:
-            rows = list(result)
-        # La columna 'name' es la segunda (índice 1)
-        return [row[1] for row in rows]
-    except Exception as e:
-        logger.error(f"❌ Error en get_column_names: {str(e)}")
-        return []
-
-# ==================================================
-# HTML
+# HTML (igual que antes)
 # ==================================================
 
 HTML = """
@@ -232,12 +213,10 @@ function buscar(){
     fetch(`/buscar?q=${encodeURIComponent(q)}&tipo=${tipo}&distrito=${encodeURIComponent(distrito)}`)
     .then(r => r.json())
     .then(data => {
-        // Si la respuesta tiene un error, mostrarlo
         if (data.error) {
-            document.getElementById('resultado').innerHTML = `<p style="color:red;">❌ Error del servidor: ${data.error}</p>`;
+            document.getElementById('resultado').innerHTML = `<p style="color:red;">❌ Error del servidor:</p><pre style="background:#fdd;padding:10px;border-radius:5px;white-space:pre-wrap;">${data.error}</pre>`;
             return;
         }
-        // Si no hay columnas o rows, mostrar mensaje
         if (!data.columnas || !data.rows) {
             document.getElementById('resultado').innerHTML = '<p>⚠️ No se encontraron resultados o la respuesta es inválida.</p>';
             return;
@@ -257,7 +236,7 @@ function buscar(){
         document.getElementById('resultado').innerHTML = html;
     })
     .catch(err => {
-        document.getElementById('resultado').innerHTML = `<p style="color:red;">❌ Error al buscar: ${err}</p>`;
+        document.getElementById('resultado').innerHTML = `<p style="color:red;">❌ Error de red o servidor: ${err}</p>`;
     });
 }
 function exportarExcel(){
@@ -292,27 +271,33 @@ def buscar():
     try:
         client = get_turso_client()
         
-        # Obtener nombres de columna reales
-        columnas_reales = get_column_names(client)
-        logger.info(f"📋 Columnas reales: {columnas_reales[:5]}...")
+        # Ahora usamos nombres de columna fijos (ya renombrados en BD)
+        columnas_reales = [
+            "rowid", "año", "no.", "área", "distrito", "servicio",
+            "departamento", "municipio", "cui_nino", "nombre_nino",
+            "día", "mes", "año_1", "departamento.1", "municipio.1",
+            "comunidad", "hombre", "mujer", "pueblo", "comunidad.1",
+            "cui_responsable", "nombre_responsable", "día.1", "mes.1",
+            "año.1", "departamento.2", "municipio.2", "comunidad.2",
+            "calle,_avenida,_zona,_lote,", "telefono", "falleció",
+            "hep._b", "bcg", "1a._(fipv)", "2a._(fipv)", "1a._(ipv)",
+            "1a._(historico)", "2a._(opv)", "3a._(opv)", "1a.", "2a.",
+            "3a.", "1a..1", "2a..1", "1a..2", "2a..2", "spr_1",
+            "neumo-_r1", "spr_2", "r1_(opv)", "r1_(dpt)", "r2_(opv)",
+            "r2_(dpt)", "1a..3", "2a..3", "1a..4", "2a..4", "1a..5",
+            "2a..5", "1a._(fipv).1", "2a._(fipv).1", "1a._(ipv).1",
+            "1a._(historico).1", "2a._(opv).1", "3a._(opv).1",
+            "r1_(opv).1", "r2_(opv).1", "1a..6", "2a..6", "3a..1",
+            "r1", "r2", "spr_1.1", "spr_2.1", "1a..7", "2a..7", "3a..2"
+        ]
         
-        if not columnas_reales:
-            client.close()
-            return jsonify({
-                "rows": [],
-                "columnas": [],
-                "total": 0,
-                "error": "No se encontraron columnas en la tabla"
-            })
-        
-        # Mapeo de los tipos de búsqueda a nombres de columna reales
         mapa = {
-            "nombre_nino": "nombre_de_la_niña_o_del_niño",
-            "nombre_responsable": "nombre_de_la_madre_padre_o_responsable",
-            "cui_nino": "código_único_de_identificación",
-            "cui_responsable": "cui"
+            "nombre_nino": "nombre_nino",
+            "nombre_responsable": "nombre_responsable",
+            "cui_nino": "cui_nino",
+            "cui_responsable": "cui_responsable"
         }
-        columna_busqueda = mapa.get(tipo, "nombre_de_la_niña_o_del_niño")
+        columna_busqueda = mapa.get(tipo, "nombre_nino")
         logger.info(f"📌 Columna de búsqueda: '{columna_busqueda}'")
         
         condiciones = []
@@ -329,7 +314,6 @@ def buscar():
             parametros.append(f"%{distrito.upper()}%")
         
         where = " AND ".join(condiciones) if condiciones else ""
-        # Límite reducido para evitar timeout
         sql = f"""
         SELECT * FROM datos_completos
         {f'WHERE {where}' if where else ''}
@@ -339,8 +323,6 @@ def buscar():
         logger.info(f"📦 Parámetros: {parametros}")
         
         result = client.execute(sql, parametros)
-        
-        # Obtener filas
         if hasattr(result, 'rows') and callable(result.rows):
             rows = result.rows()
         else:
@@ -352,7 +334,6 @@ def buscar():
             client.close()
             return jsonify({"rows": [], "columnas": [], "total": 0})
         
-        # Crear diccionarios con las columnas reales
         rows_dict = [dict(zip(columnas_reales, row)) for row in rows]
         
         # Filtrar columnas que no se quieren mostrar
@@ -391,19 +372,33 @@ def exportar():
     
     try:
         client = get_turso_client()
-        columnas_reales = get_column_names(client)
         
-        if not columnas_reales:
-            client.close()
-            return jsonify({"error": "No se encontraron columnas"}), 400
+        columnas_reales = [
+            "rowid", "año", "no.", "área", "distrito", "servicio",
+            "departamento", "municipio", "cui_nino", "nombre_nino",
+            "día", "mes", "año_1", "departamento.1", "municipio.1",
+            "comunidad", "hombre", "mujer", "pueblo", "comunidad.1",
+            "cui_responsable", "nombre_responsable", "día.1", "mes.1",
+            "año.1", "departamento.2", "municipio.2", "comunidad.2",
+            "calle,_avenida,_zona,_lote,", "telefono", "falleció",
+            "hep._b", "bcg", "1a._(fipv)", "2a._(fipv)", "1a._(ipv)",
+            "1a._(historico)", "2a._(opv)", "3a._(opv)", "1a.", "2a.",
+            "3a.", "1a..1", "2a..1", "1a..2", "2a..2", "spr_1",
+            "neumo-_r1", "spr_2", "r1_(opv)", "r1_(dpt)", "r2_(opv)",
+            "r2_(dpt)", "1a..3", "2a..3", "1a..4", "2a..4", "1a..5",
+            "2a..5", "1a._(fipv).1", "2a._(fipv).1", "1a._(ipv).1",
+            "1a._(historico).1", "2a._(opv).1", "3a._(opv).1",
+            "r1_(opv).1", "r2_(opv).1", "1a..6", "2a..6", "3a..1",
+            "r1", "r2", "spr_1.1", "spr_2.1", "1a..7", "2a..7", "3a..2"
+        ]
         
         mapa = {
-            "nombre_nino": "nombre_de_la_niña_o_del_niño",
-            "nombre_responsable": "nombre_de_la_madre_padre_o_responsable",
-            "cui_nino": "código_único_de_identificación",
-            "cui_responsable": "cui"
+            "nombre_nino": "nombre_nino",
+            "nombre_responsable": "nombre_responsable",
+            "cui_nino": "cui_nino",
+            "cui_responsable": "cui_responsable"
         }
-        columna_busqueda = mapa.get(tipo, "nombre_de_la_niña_o_del_niño")
+        columna_busqueda = mapa.get(tipo, "nombre_nino")
         
         condiciones = []
         parametros = []
