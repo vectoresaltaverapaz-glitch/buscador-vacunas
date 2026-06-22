@@ -52,7 +52,7 @@ RENOMBRES = {
     "nombre_responsable": "Nombre Responsable",
     "telefono": "Teléfono",
     "falleció": "Falleció",
-    # Vacunas (mantienen los nombres originales porque no se renombraron)
+    # Vacunas
     "hep._b": "Hepatitis B (<1 año)",
     "bcg": "BCG (<1 año)",
     "1a._(fipv)": "Polio 1 (<1 año)",
@@ -162,7 +162,30 @@ def procesar_valor(columna, valor):
     return limpiar_numero(valor)
 
 # ==================================================
-# HTML (igual que antes)
+# COLUMNAS REALES (lista fija para evitar PRAGMA)
+# ==================================================
+
+COLUMNAS_REALES = [
+    "rowid", "año", "no.", "área", "distrito", "servicio",
+    "departamento", "municipio", "cui_nino", "nombre_nino",
+    "día", "mes", "año_1", "departamento.1", "municipio.1",
+    "comunidad", "hombre", "mujer", "pueblo", "comunidad.1",
+    "cui_responsable", "nombre_responsable", "día.1", "mes.1",
+    "año.1", "departamento.2", "municipio.2", "comunidad.2",
+    "calle,_avenida,_zona,_lote,", "telefono", "falleció",
+    "hep._b", "bcg", "1a._(fipv)", "2a._(fipv)", "1a._(ipv)",
+    "1a._(historico)", "2a._(opv)", "3a._(opv)", "1a.", "2a.",
+    "3a.", "1a..1", "2a..1", "1a..2", "2a..2", "spr_1",
+    "neumo-_r1", "spr_2", "r1_(opv)", "r1_(dpt)", "r2_(opv)",
+    "r2_(dpt)", "1a..3", "2a..3", "1a..4", "2a..4", "1a..5",
+    "2a..5", "1a._(fipv).1", "2a._(fipv).1", "1a._(ipv).1",
+    "1a._(historico).1", "2a._(opv).1", "3a._(opv).1",
+    "r1_(opv).1", "r2_(opv).1", "1a..6", "2a..6", "3a..1",
+    "r1", "r2", "spr_1.1", "spr_2.1", "1a..7", "2a..7", "3a..2"
+]
+
+# ==================================================
+# HTML
 # ==================================================
 
 HTML = """
@@ -271,26 +294,6 @@ def buscar():
     try:
         client = get_turso_client()
         
-        # Ahora usamos nombres de columna fijos (ya renombrados en BD)
-        columnas_reales = [
-            "rowid", "año", "no.", "área", "distrito", "servicio",
-            "departamento", "municipio", "cui_nino", "nombre_nino",
-            "día", "mes", "año_1", "departamento.1", "municipio.1",
-            "comunidad", "hombre", "mujer", "pueblo", "comunidad.1",
-            "cui_responsable", "nombre_responsable", "día.1", "mes.1",
-            "año.1", "departamento.2", "municipio.2", "comunidad.2",
-            "calle,_avenida,_zona,_lote,", "telefono", "falleció",
-            "hep._b", "bcg", "1a._(fipv)", "2a._(fipv)", "1a._(ipv)",
-            "1a._(historico)", "2a._(opv)", "3a._(opv)", "1a.", "2a.",
-            "3a.", "1a..1", "2a..1", "1a..2", "2a..2", "spr_1",
-            "neumo-_r1", "spr_2", "r1_(opv)", "r1_(dpt)", "r2_(opv)",
-            "r2_(dpt)", "1a..3", "2a..3", "1a..4", "2a..4", "1a..5",
-            "2a..5", "1a._(fipv).1", "2a._(fipv).1", "1a._(ipv).1",
-            "1a._(historico).1", "2a._(opv).1", "3a._(opv).1",
-            "r1_(opv).1", "r2_(opv).1", "1a..6", "2a..6", "3a..1",
-            "r1", "r2", "spr_1.1", "spr_2.1", "1a..7", "2a..7", "3a..2"
-        ]
-        
         mapa = {
             "nombre_nino": "nombre_nino",
             "nombre_responsable": "nombre_responsable",
@@ -313,7 +316,7 @@ def buscar():
             condiciones.append('UPPER("distrito") LIKE ?')
             parametros.append(f"%{distrito.upper()}%")
         
-        where = " AND ".join(condiciones) if condiciones else ""
+        where = " AND ".join(condiciones) if condizioni else ""
         sql = f"""
         SELECT * FROM datos_completos
         {f'WHERE {where}' if where else ''}
@@ -334,11 +337,11 @@ def buscar():
             client.close()
             return jsonify({"rows": [], "columnas": [], "total": 0})
         
-        rows_dict = [dict(zip(columnas_reales, row)) for row in rows]
+        rows_dict = [dict(zip(COLUMNAS_REALES, row)) for row in rows]
         
         # Filtrar columnas que no se quieren mostrar
         columnas_excluir = ["día", "mes", "año_1", "hombre", "mujer"]
-        columnas_finales = [c for c in columnas_reales if c not in columnas_excluir]
+        columnas_finales = [c for c in COLUMNAS_REALES if c not in columnas_excluir]
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
         
         resultados = []
@@ -363,6 +366,12 @@ def buscar():
             "error": str(e)
         })
 
+# ==================================================
+# EXPORTAR CON LÍMITE DE REGISTROS (evita memory error)
+# ==================================================
+
+MAX_EXPORT_ROWS = 1000  # Ajusta este valor si necesitas más o menos
+
 @app.route('/exportar')
 @auth.login_required
 def exportar():
@@ -372,25 +381,6 @@ def exportar():
     
     try:
         client = get_turso_client()
-        
-        columnas_reales = [
-            "rowid", "año", "no.", "área", "distrito", "servicio",
-            "departamento", "municipio", "cui_nino", "nombre_nino",
-            "día", "mes", "año_1", "departamento.1", "municipio.1",
-            "comunidad", "hombre", "mujer", "pueblo", "comunidad.1",
-            "cui_responsable", "nombre_responsable", "día.1", "mes.1",
-            "año.1", "departamento.2", "municipio.2", "comunidad.2",
-            "calle,_avenida,_zona,_lote,", "telefono", "falleció",
-            "hep._b", "bcg", "1a._(fipv)", "2a._(fipv)", "1a._(ipv)",
-            "1a._(historico)", "2a._(opv)", "3a._(opv)", "1a.", "2a.",
-            "3a.", "1a..1", "2a..1", "1a..2", "2a..2", "spr_1",
-            "neumo-_r1", "spr_2", "r1_(opv)", "r1_(dpt)", "r2_(opv)",
-            "r2_(dpt)", "1a..3", "2a..3", "1a..4", "2a..4", "1a..5",
-            "2a..5", "1a._(fipv).1", "2a._(fipv).1", "1a._(ipv).1",
-            "1a._(historico).1", "2a._(opv).1", "3a._(opv).1",
-            "r1_(opv).1", "r2_(opv).1", "1a..6", "2a..6", "3a..1",
-            "r1", "r2", "spr_1.1", "spr_2.1", "1a..7", "2a..7", "3a..2"
-        ]
         
         mapa = {
             "nombre_nino": "nombre_nino",
@@ -414,7 +404,12 @@ def exportar():
             parametros.append(f"%{distrito.upper()}%")
         
         where = " AND ".join(condiciones) if condiciones else ""
-        sql = f"SELECT * FROM datos_completos {f'WHERE {where}' if where else ''}"
+        # Exportar con límite de filas
+        sql = f"""
+        SELECT * FROM datos_completos
+        {f'WHERE {where}' if where else ''}
+        LIMIT {MAX_EXPORT_ROWS}
+        """
         logger.info(f"📝 SQL export: {sql}")
         
         result = client.execute(sql, parametros)
@@ -423,34 +418,54 @@ def exportar():
         else:
             rows = list(result)
         
-        rows_dict = [dict(zip(columnas_reales, row)) for row in rows] if columnas_reales else []
+        # Si no hay filas, devolver Excel vacío
+        if not rows:
+            client.close()
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Resultados"
+            ws.append(["No se encontraron registros"])
+            output = BytesIO()
+            wb.save(output)
+            output.seek(0)
+            return Response(
+                output.getvalue(),
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                headers={'Content-Disposition': 'attachment; filename=resultados.xlsx'}
+            )
+        
+        rows_dict = [dict(zip(COLUMNAS_REALES, row)) for row in rows]
         
         wb = Workbook()
         ws = wb.active
         ws.title = "Resultados"
         
-        if rows_dict:
-            columnas_excluir = ["día", "mes", "año_1", "hombre", "mujer"]
-            columnas_finales = [c for c in columnas_reales if c not in columnas_excluir]
-            titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
-            ws.append(titulos_columnas)
-            for cell in ws[1]:
-                cell.font = Font(bold=True, color="FFFFFF")
-                cell.fill = PatternFill(start_color="1e466e", end_color="1e466e", fill_type="solid")
-                cell.alignment = Alignment(horizontal="center")
-            for row in rows_dict:
-                fila = [procesar_valor(c, row.get(c)) for c in columnas_finales]
-                ws.append(fila)
+        # Encabezados
+        columnas_excluir = ["día", "mes", "año_1", "hombre", "mujer"]
+        columnas_finales = [c for c in COLUMNAS_REALES if c not in columnas_excluir]
+        titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
+        ws.append(titulos_columnas)
+        for cell in ws[1]:
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill(start_color="1e466e", end_color="1e466e", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center")
+        
+        # Datos
+        for row in rows_dict:
+            fila = [procesar_valor(c, row.get(c)) for c in columnas_finales]
+            ws.append(fila)
         
         output = BytesIO()
         wb.save(output)
         output.seek(0)
         client.close()
+        
         return Response(
             output.getvalue(),
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             headers={'Content-Disposition': 'attachment; filename=resultados.xlsx'}
         )
+    
     except Exception as e:
         logger.error(f"❌ Error en /exportar: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
