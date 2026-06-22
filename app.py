@@ -34,7 +34,7 @@ def get_turso_client():
     return libsql_client.create_client_sync(url=url, auth_token=token)
 
 # ==================================================
-# RENOMBRES (nombre actual en BD → título bonito)
+# RENOMBRES
 # ==================================================
 
 RENOMBRES = {
@@ -102,7 +102,7 @@ RENOMBRES = {
 }
 
 # ==================================================
-# COLUMNAS FECHA (nombres actuales en BD)
+# COLUMNAS FECHA
 # ==================================================
 
 COLUMNAS_FECHA = {
@@ -162,7 +162,7 @@ def procesar_valor(columna, valor):
     return limpiar_numero(valor)
 
 # ==================================================
-# COLUMNAS REALES (lista fija para evitar PRAGMA)
+# COLUMNAS REALES (fijas)
 # ==================================================
 
 COLUMNAS_REALES = [
@@ -266,6 +266,8 @@ function exportarExcel(){
     let q = document.getElementById('search').value;
     let tipo = document.getElementById('tipo').value;
     let distrito = document.getElementById('distrito').value;
+    // Aviso de límite
+    alert('La exportación está limitada a 50 registros para evitar problemas de memoria.');
     window.location.href = `/exportar?q=${encodeURIComponent(q)}&tipo=${tipo}&distrito=${encodeURIComponent(distrito)}`;
 }
 </script>
@@ -316,7 +318,7 @@ def buscar():
             condiciones.append('UPPER("distrito") LIKE ?')
             parametros.append(f"%{distrito.upper()}%")
         
-        where = " AND ".join(condiciones) if condizioni else ""
+        where = " AND ".join(condiciones) if condiciones else ""
         sql = f"""
         SELECT * FROM datos_completos
         {f'WHERE {where}' if where else ''}
@@ -339,7 +341,7 @@ def buscar():
         
         rows_dict = [dict(zip(COLUMNAS_REALES, row)) for row in rows]
         
-        # Filtrar columnas que no se quieren mostrar
+        # Filtrar columnas
         columnas_excluir = ["día", "mes", "año_1", "hombre", "mujer"]
         columnas_finales = [c for c in COLUMNAS_REALES if c not in columnas_excluir]
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
@@ -367,10 +369,10 @@ def buscar():
         })
 
 # ==================================================
-# EXPORTAR CON LÍMITE DE REGISTROS (evita memory error)
+# EXPORTAR CON LÍMITE MUY BAJO PARA EVITAR TIMEOUT
 # ==================================================
 
-MAX_EXPORT_ROWS = 1000  # Ajusta este valor si necesitas más o menos
+MAX_EXPORT_ROWS = 50  # Reducido a 50 para evitar timeout
 
 @app.route('/exportar')
 @auth.login_required
@@ -404,7 +406,6 @@ def exportar():
             parametros.append(f"%{distrito.upper()}%")
         
         where = " AND ".join(condiciones) if condiciones else ""
-        # Exportar con límite de filas
         sql = f"""
         SELECT * FROM datos_completos
         {f'WHERE {where}' if where else ''}
@@ -418,7 +419,7 @@ def exportar():
         else:
             rows = list(result)
         
-        # Si no hay filas, devolver Excel vacío
+        # Si no hay filas
         if not rows:
             client.close()
             wb = Workbook()
