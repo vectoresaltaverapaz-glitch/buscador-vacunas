@@ -33,8 +33,21 @@ def get_turso_client():
     logger.info(f"✅ Conectando a Turso: {url}")
     return libsql_client.create_client_sync(url=url, auth_token=token)
 
+def get_distritos(client):
+    """Obtiene lista única de distritos ordenada alfabéticamente"""
+    try:
+        result = client.execute("SELECT DISTINCT distrito FROM datos_completos WHERE distrito IS NOT NULL AND distrito != '' ORDER BY distrito")
+        if hasattr(result, 'rows') and callable(result.rows):
+            rows = result.rows()
+        else:
+            rows = list(result)
+        return [row[0] for row in rows]
+    except Exception as e:
+        logger.error(f"❌ Error al obtener distritos: {str(e)}")
+        return []
+
 # ==================================================
-# RENOMBRES
+# RENOMBRES (nombre actual en BD → título bonito)
 # ==================================================
 
 RENOMBRES = {
@@ -102,7 +115,7 @@ RENOMBRES = {
 }
 
 # ==================================================
-# COLUMNAS FECHA
+# COLUMNAS FECHA (nombres actuales en BD)
 # ==================================================
 
 COLUMNAS_FECHA = {
@@ -162,7 +175,7 @@ def procesar_valor(columna, valor):
     return limpiar_numero(valor)
 
 # ==================================================
-# COLUMNAS REALES (fijas)
+# COLUMNAS REALES (lista fija para evitar PRAGMA)
 # ==================================================
 
 COLUMNAS_REALES = [
@@ -185,7 +198,7 @@ COLUMNAS_REALES = [
 ]
 
 # ==================================================
-# HTML
+# HTML (con marcador para distritos)
 # ==================================================
 
 HTML = """
@@ -207,15 +220,7 @@ th{ background:#1e466e; color:white; position:sticky; top:0; }
 <div class="container">
 <h2>🔍 Buscador SIGSA</h2>
 <select id="distrito">
-<option value="">TODOS LOS DISTRITOS</option>
-<option value="COBAN">COBAN</option>
-<option value="SAN PEDRO CARCHA">SAN PEDRO CARCHA</option>
-<option value="TACTIC">TACTIC</option>
-<option value="LANQUIN">LANQUIN</option>
-<option value="CHISEC">CHISEC</option>
-<option value="CAHABON">CAHABON</option>
-<option value="SENAHU">SENAHU</option>
-<option value="FRAY BARTOLOME">FRAY BARTOLOME</option>
+<!-- DISTRITOS_AQUI -->
 </select>
 <select id="tipo">
 <option value="nombre_nino">Nombre Niño</option>
@@ -266,8 +271,6 @@ function exportarExcel(){
     let q = document.getElementById('search').value;
     let tipo = document.getElementById('tipo').value;
     let distrito = document.getElementById('distrito').value;
-    // Aviso de límite
-    alert('La exportación está limitada a 50 registros para evitar problemas de memoria.');
     window.location.href = `/exportar?q=${encodeURIComponent(q)}&tipo=${tipo}&distrito=${encodeURIComponent(distrito)}`;
 }
 </script>
@@ -282,7 +285,24 @@ function exportarExcel(){
 @app.route('/')
 @auth.login_required
 def index():
-    return render_template_string(HTML)
+    try:
+        client = get_turso_client()
+        distritos = get_distritos(client)
+        client.close()
+        
+        # Generar opciones HTML
+        opciones = '<option value="">TODOS LOS DISTRITOS</option>'
+        for d in distritos:
+            opciones += f'<option value="{d}">{d}</option>'
+        
+        # Reemplazar en HTML
+        html_con_distritos = HTML.replace('<!-- DISTRITOS_AQUI -->', opciones)
+        return render_template_string(html_con_distritos)
+    except Exception as e:
+        logger.error(f"❌ Error al cargar distritos: {str(e)}")
+        # Fallback: usar lista manual simple
+        html_fallback = HTML.replace('<!-- DISTRITOS_AQUI -->', '<option value="">TODOS LOS DISTRITOS</option>')
+        return render_template_string(html_fallback)
 
 @app.route('/buscar')
 @auth.login_required
@@ -315,8 +335,8 @@ def buscar():
                 condiciones.append(f'"{columna_busqueda}" LIKE ?')
                 parametros.append(f"%{query}%")
         if distrito:
-            condiciones.append('UPPER("distrito") LIKE ?')
-            parametros.append(f"%{distrito.upper()}%")
+            condiciones.append('"distrito" = ?')
+            parametros.append(distrito)
         
         where = " AND ".join(condiciones) if condiciones else ""
         sql = f"""
@@ -341,7 +361,7 @@ def buscar():
         
         rows_dict = [dict(zip(COLUMNAS_REALES, row)) for row in rows]
         
-        # Filtrar columnas
+        # Filtrar columnas que no se quieren mostrar
         columnas_excluir = ["día", "mes", "año_1", "hombre", "mujer"]
         columnas_finales = [c for c in COLUMNAS_REALES if c not in columnas_excluir]
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
@@ -368,11 +388,7 @@ def buscar():
             "error": str(e)
         })
 
-# ==================================================
-# EXPORTAR CON LÍMITE MUY BAJO PARA EVITAR TIMEOUT
-# ==================================================
-
-MAX_EXPORT_ROWS = 50  # Reducido a 50 para evitar timeout
+MAX_EXPORT_ROWS = 1000
 
 @app.route('/exportar')
 @auth.login_required
@@ -402,8 +418,8 @@ def exportar():
                 condiciones.append(f'"{columna_busqueda}" LIKE ?')
                 parametros.append(f"%{query}%")
         if distrito:
-            condiciones.append('UPPER("distrito") LIKE ?')
-            parametros.append(f"%{distrito.upper()}%")
+            condiciones.append('"distrito" = ?')
+            parametros.append(distrito)
         
         where = " AND ".join(condiciones) if condiciones else ""
         sql = f"""
@@ -419,7 +435,6 @@ def exportar():
         else:
             rows = list(result)
         
-        # Si no hay filas
         if not rows:
             client.close()
             wb = Workbook()
@@ -441,7 +456,6 @@ def exportar():
         ws = wb.active
         ws.title = "Resultados"
         
-        # Encabezados
         columnas_excluir = ["día", "mes", "año_1", "hombre", "mujer"]
         columnas_finales = [c for c in COLUMNAS_REALES if c not in columnas_excluir]
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
@@ -451,7 +465,6 @@ def exportar():
             cell.fill = PatternFill(start_color="1e466e", end_color="1e466e", fill_type="solid")
             cell.alignment = Alignment(horizontal="center")
         
-        # Datos
         for row in rows_dict:
             fila = [procesar_valor(c, row.get(c)) for c in columnas_finales]
             ws.append(fila)
