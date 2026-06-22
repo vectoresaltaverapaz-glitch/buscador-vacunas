@@ -301,7 +301,8 @@ th{ background:#1e466e; color:white; position:sticky; top:0; }
     </div>
 
     <div class="botones" style="margin-top:10px;">
-        <button id="btnBuscar" onclick="buscar()">🔍 Buscar</button>
+        <button id="btnBuscar" onclick="iniciarBusqueda()">🔍 Buscar</button>
+        <button id="btnCancelar" onclick="cancelarBusqueda()" style="display:none; background:#f39c12; color:white; border:none;">⏹ Cancelar</button>
         <button onclick="exportarExcel()">📊 Exportar Excel</button>
         <button onclick="limpiar()" style="background:#e74c3c; color:white; border:none;">🔄 Nueva búsqueda</button>
         <span style="margin-left:15px;font-size:14px;color:#555;">Mostrando hasta 50 registros</span>
@@ -313,10 +314,22 @@ th{ background:#1e466e; color:white; position:sticky; top:0; }
 </div>
 
 <script>
-function buscar(){
+var abortController = null;
+
+function iniciarBusqueda(){
+    // Si ya hay una búsqueda en curso, cancelarla primero
+    if (abortController) {
+        abortController.abort();
+    }
+
+    // Mostrar spinner y deshabilitar botones
     document.getElementById('spinner').style.display = 'block';
     document.getElementById('btnBuscar').disabled = true;
+    document.getElementById('btnCancelar').style.display = 'inline-block';
     document.getElementById('resultado').innerHTML = '';
+
+    // Crear nuevo AbortController
+    abortController = new AbortController();
 
     let q = document.getElementById('search').value;
     let tipo = document.getElementById('tipo').value;
@@ -337,12 +350,10 @@ function buscar(){
     if (mes_madre) url += `&mes_madre=${mes_madre}`;
     if (ano_madre) url += `&ano_madre=${ano_madre}`;
 
-    fetch(url)
+    fetch(url, { signal: abortController.signal })
     .then(r => r.json())
     .then(data => {
-        document.getElementById('spinner').style.display = 'none';
-        document.getElementById('btnBuscar').disabled = false;
-
+        finalizarBusqueda();
         if (data.error) {
             document.getElementById('resultado').innerHTML = `<p style="color:red;">❌ Error: ${data.error}</p>`;
             return;
@@ -366,13 +377,39 @@ function buscar(){
         document.getElementById('resultado').innerHTML = html;
     })
     .catch(err => {
-        document.getElementById('spinner').style.display = 'none';
-        document.getElementById('btnBuscar').disabled = false;
-        document.getElementById('resultado').innerHTML = `<p style="color:red;">❌ Error: ${err}</p>`;
+        if (err.name === 'AbortError') {
+            // Cancelación intencional, no mostrar error
+            document.getElementById('resultado').innerHTML = '<p>⏹ Búsqueda cancelada.</p>';
+        } else {
+            finalizarBusqueda();
+            document.getElementById('resultado').innerHTML = `<p style="color:red;">❌ Error: ${err}</p>`;
+        }
+    })
+    .finally(() => {
+        finalizarBusqueda();
+        abortController = null;
     });
 }
 
+function cancelarBusqueda(){
+    if (abortController) {
+        abortController.abort();
+        // El .finally se encargará de limpiar la UI
+    }
+}
+
+function finalizarBusqueda(){
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('btnBuscar').disabled = false;
+    document.getElementById('btnCancelar').style.display = 'none';
+}
+
 function limpiar(){
+    // Cancelar búsqueda en curso si existe
+    if (abortController) {
+        abortController.abort();
+        abortController = null;
+    }
     document.getElementById('search').value = '';
     document.getElementById('tipo').value = 'nombre_nino';
     document.getElementById('distrito').value = '';
@@ -384,12 +421,13 @@ function limpiar(){
     document.getElementById('mes_madre').value = '';
     document.getElementById('ano_madre').value = '';
     document.getElementById('resultado').innerHTML = '';
-    document.getElementById('spinner').style.display = 'none';
-    document.getElementById('btnBuscar').disabled = false;
-    buscar();
+    finalizarBusqueda();
+    // Opcional: auto-buscar después de limpiar
+    iniciarBusqueda();
 }
 
 function exportarExcel(){
+    // Si hay búsqueda en curso, no la cancelamos, solo exportamos con los filtros actuales
     let q = document.getElementById('search').value;
     let tipo = document.getElementById('tipo').value;
     let distrito = document.getElementById('distrito').value;
@@ -453,9 +491,7 @@ def buscar():
         fts_params = []
         
         if query:
-            # Buscar en la tabla FTS
             if tipo == "nombre_nino":
-                # La tabla fts_data tiene la columna 'nombre'
                 fts_query = f"{query}*"
                 fts_sql = f"""
                     SELECT rowid FROM fts_data 
@@ -467,7 +503,6 @@ def buscar():
                 fts_rows = fts_result.rows() if hasattr(fts_result, 'rows') and callable(fts_result.rows) else list(fts_result)
                 
                 if fts_rows:
-                    # Obtener los rowid de los resultados FTS
                     rowids = [str(row[0]) for row in fts_rows]
                     fts_condition = f'"rowid" IN ({",".join(rowids)})'
                     logger.info(f"🔍 FTS encontró {len(rowids)} filas")
@@ -476,8 +511,6 @@ def buscar():
                     return jsonify({"rows": [], "columnas": [], "total": 0})
             
             elif tipo == "nombre_responsable":
-                # Similar pero para responsable (no hay FTS directo, usamos LIKE pero con FTS de nombre? 
-                # Para simplificar, usamos LIKE en responsable pero con índice limitado)
                 fts_condition = f'"nombre_responsable" LIKE ?'
                 fts_params.append(f"%{query}%")
         
@@ -485,7 +518,6 @@ def buscar():
         condiciones = []
         parametros = []
         
-        # Si no hay FTS y hay query, usar LIKE en la columna correspondiente
         if query and not fts_condition:
             if tipo == "nombre_nino":
                 condiciones.append('"nombre_nino" LIKE ?')
@@ -503,12 +535,10 @@ def buscar():
                 condiciones.append('"servicio" LIKE ?')
                 parametros.append(f"%{query}%")
         
-        # Filtro por distrito
         if distrito:
             condiciones.append('UPPER("distrito") LIKE ?')
             parametros.append(f"%{distrito.upper()}%")
         
-        # Filtro por género
         if genero:
             if genero == "Hombre":
                 condiciones.append('"hombre" = "X"')
@@ -517,7 +547,6 @@ def buscar():
             elif genero == "No especificado":
                 condiciones.append('"hombre" != "X" AND "mujer" != "X"')
         
-        # Filtro por fecha de nacimiento del niño
         if dia_nac:
             condiciones.append('"día" = ?')
             parametros.append(dia_nac)
@@ -528,7 +557,6 @@ def buscar():
             condiciones.append('"año_1" = ?')
             parametros.append(ano_nac)
         
-        # Filtro por fecha de nacimiento del responsable
         if dia_madre:
             condiciones.append('"día.1" = ?')
             parametros.append(dia_madre)
@@ -539,7 +567,6 @@ def buscar():
             condiciones.append('"año.1" = ?')
             parametros.append(ano_madre)
         
-        # --- 3. Construir SQL final ---
         where_parts = []
         if fts_condition:
             where_parts.append(fts_condition)
