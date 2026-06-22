@@ -33,19 +33,6 @@ def get_turso_client():
     logger.info(f"✅ Conectando a Turso: {url}")
     return libsql_client.create_client_sync(url=url, auth_token=token)
 
-def get_distritos(client):
-    """Obtiene lista única de distritos ordenada alfabéticamente"""
-    try:
-        result = client.execute("SELECT DISTINCT distrito FROM datos_completos WHERE distrito IS NOT NULL AND distrito != '' ORDER BY distrito")
-        if hasattr(result, 'rows') and callable(result.rows):
-            rows = result.rows()
-        else:
-            rows = list(result)
-        return [row[0] for row in rows]
-    except Exception as e:
-        logger.error(f"❌ Error al obtener distritos: {str(e)}")
-        return []
-
 # ==================================================
 # RENOMBRES (nombre actual en BD → título bonito)
 # ==================================================
@@ -175,7 +162,7 @@ def procesar_valor(columna, valor):
     return limpiar_numero(valor)
 
 # ==================================================
-# COLUMNAS REALES (lista fija para evitar PRAGMA)
+# COLUMNAS REALES (lista fija)
 # ==================================================
 
 COLUMNAS_REALES = [
@@ -198,8 +185,14 @@ COLUMNAS_REALES = [
 ]
 
 # ==================================================
-# HTML (con marcador para distritos)
+# HTML CON DISTRITOS COMPLETOS Y NUEVOS CAMPOS
 # ==================================================
+
+DISTRITOS = [
+    "COBAN", "SAN PEDRO CARCHA", "TACTIC", "LANQUIN", "CHISEC",
+    "CAHABON", "SENAHU", "FRAY BARTOLOME", "PANZOS", "SAN JUAN CHAMELCO",
+    "SENAHU", "TUCURU", "TAMAHU", "SANTA CRUZ VERAPAZ", "CAMPUR"
+]
 
 HTML = """
 <!DOCTYPE html>
@@ -220,15 +213,26 @@ th{ background:#1e466e; color:white; position:sticky; top:0; }
 <div class="container">
 <h2>🔍 Buscador SIGSA</h2>
 <select id="distrito">
-<!-- DISTRITOS_AQUI -->
+<option value="">TODOS LOS DISTRITOS</option>
+""" + "\n".join([f'<option value="{d}">{d}</option>' for d in DISTRITOS]) + """
 </select>
+
 <select id="tipo">
 <option value="nombre_nino">Nombre Niño</option>
 <option value="nombre_responsable">Nombre Responsable</option>
 <option value="cui_nino">CUI Niño</option>
 <option value="cui_responsable">CUI Responsable</option>
 </select>
-<input type="text" id="search">
+
+<input type="text" id="search" placeholder="Buscar...">
+
+<!-- Nuevos campos de búsqueda -->
+<div style="margin-top:10px;">
+    <label>Fecha de nacimiento: Día <input type="text" id="dia_nac" placeholder="DD" size="3">
+    Mes <input type="text" id="mes_nac" placeholder="MM" size="3">
+    Año <input type="text" id="anio_nac" placeholder="YYYY" size="5"></label>
+</div>
+
 <button onclick="buscar()">Buscar</button>
 <button onclick="exportarExcel()">Exportar Excel</button>
 <div id="resultado"></div>
@@ -238,7 +242,14 @@ function buscar(){
     let q = document.getElementById('search').value;
     let tipo = document.getElementById('tipo').value;
     let distrito = document.getElementById('distrito').value;
-    fetch(`/buscar?q=${encodeURIComponent(q)}&tipo=${tipo}&distrito=${encodeURIComponent(distrito)}`)
+    let dia = document.getElementById('dia_nac').value;
+    let mes = document.getElementById('mes_nac').value;
+    let anio = document.getElementById('anio_nac').value;
+    let url = `/buscar?q=${encodeURIComponent(q)}&tipo=${tipo}&distrito=${encodeURIComponent(distrito)}`;
+    if (dia) url += `&dia=${encodeURIComponent(dia)}`;
+    if (mes) url += `&mes=${encodeURIComponent(mes)}`;
+    if (anio) url += `&anio=${encodeURIComponent(anio)}`;
+    fetch(url)
     .then(r => r.json())
     .then(data => {
         if (data.error) {
@@ -271,7 +282,14 @@ function exportarExcel(){
     let q = document.getElementById('search').value;
     let tipo = document.getElementById('tipo').value;
     let distrito = document.getElementById('distrito').value;
-    window.location.href = `/exportar?q=${encodeURIComponent(q)}&tipo=${tipo}&distrito=${encodeURIComponent(distrito)}`;
+    let dia = document.getElementById('dia_nac').value;
+    let mes = document.getElementById('mes_nac').value;
+    let anio = document.getElementById('anio_nac').value;
+    let url = `/exportar?q=${encodeURIComponent(q)}&tipo=${tipo}&distrito=${encodeURIComponent(distrito)}`;
+    if (dia) url += `&dia=${encodeURIComponent(dia)}`;
+    if (mes) url += `&mes=${encodeURIComponent(mes)}`;
+    if (anio) url += `&anio=${encodeURIComponent(anio)}`;
+    window.location.href = url;
 }
 </script>
 </body>
@@ -285,24 +303,7 @@ function exportarExcel(){
 @app.route('/')
 @auth.login_required
 def index():
-    try:
-        client = get_turso_client()
-        distritos = get_distritos(client)
-        client.close()
-        
-        # Generar opciones HTML
-        opciones = '<option value="">TODOS LOS DISTRITOS</option>'
-        for d in distritos:
-            opciones += f'<option value="{d}">{d}</option>'
-        
-        # Reemplazar en HTML
-        html_con_distritos = HTML.replace('<!-- DISTRITOS_AQUI -->', opciones)
-        return render_template_string(html_con_distritos)
-    except Exception as e:
-        logger.error(f"❌ Error al cargar distritos: {str(e)}")
-        # Fallback: usar lista manual simple
-        html_fallback = HTML.replace('<!-- DISTRITOS_AQUI -->', '<option value="">TODOS LOS DISTRITOS</option>')
-        return render_template_string(html_fallback)
+    return render_template_string(HTML)
 
 @app.route('/buscar')
 @auth.login_required
@@ -310,8 +311,11 @@ def buscar():
     query = request.args.get('q', '').strip()
     tipo = request.args.get('tipo', 'nombre_nino')
     distrito = request.args.get('distrito', '').strip()
+    dia = request.args.get('dia', '').strip()
+    mes = request.args.get('mes', '').strip()
+    anio = request.args.get('anio', '').strip()
     
-    logger.info(f"🔍 Búsqueda: query='{query}', tipo='{tipo}', distrito='{distrito}'")
+    logger.info(f"🔍 Búsqueda: query='{query}', tipo='{tipo}', distrito='{distrito}', dia='{dia}', mes='{mes}', anio='{anio}'")
     
     try:
         client = get_turso_client()
@@ -335,14 +339,24 @@ def buscar():
                 condiciones.append(f'"{columna_busqueda}" LIKE ?')
                 parametros.append(f"%{query}%")
         if distrito:
-            condiciones.append('"distrito" = ?')
-            parametros.append(distrito)
+            condiciones.append('UPPER("distrito") LIKE ?')
+            parametros.append(f"%{distrito.upper()}%")
+        # Fecha de nacimiento (día, mes, año)
+        if dia.isdigit():
+            condiciones.append('"día" = ?')
+            parametros.append(int(dia))
+        if mes.isdigit():
+            condiciones.append('"mes" = ?')
+            parametros.append(int(mes))
+        if anio.isdigit():
+            condiciones.append('"año_1" = ?')  # La columna de año de nacimiento se llama "año_1"
+            parametros.append(int(anio))
         
         where = " AND ".join(condiciones) if condiciones else ""
         sql = f"""
         SELECT * FROM datos_completos
         {f'WHERE {where}' if where else ''}
-        LIMIT 30
+        LIMIT 50
         """
         logger.info(f"📝 SQL: {sql}")
         logger.info(f"📦 Parámetros: {parametros}")
@@ -361,7 +375,6 @@ def buscar():
         
         rows_dict = [dict(zip(COLUMNAS_REALES, row)) for row in rows]
         
-        # Filtrar columnas que no se quieren mostrar
         columnas_excluir = ["día", "mes", "año_1", "hombre", "mujer"]
         columnas_finales = [c for c in COLUMNAS_REALES if c not in columnas_excluir]
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
@@ -388,6 +401,10 @@ def buscar():
             "error": str(e)
         })
 
+# ==================================================
+# EXPORTAR CON LÍMITE DE REGISTROS
+# ==================================================
+
 MAX_EXPORT_ROWS = 1000
 
 @app.route('/exportar')
@@ -396,6 +413,9 @@ def exportar():
     query = request.args.get('q', '').strip()
     tipo = request.args.get('tipo', 'nombre_nino')
     distrito = request.args.get('distrito', '').strip()
+    dia = request.args.get('dia', '').strip()
+    mes = request.args.get('mes', '').strip()
+    anio = request.args.get('anio', '').strip()
     
     try:
         client = get_turso_client()
@@ -418,8 +438,17 @@ def exportar():
                 condiciones.append(f'"{columna_busqueda}" LIKE ?')
                 parametros.append(f"%{query}%")
         if distrito:
-            condiciones.append('"distrito" = ?')
-            parametros.append(distrito)
+            condiciones.append('UPPER("distrito") LIKE ?')
+            parametros.append(f"%{distrito.upper()}%")
+        if dia.isdigit():
+            condiciones.append('"día" = ?')
+            parametros.append(int(dia))
+        if mes.isdigit():
+            condiciones.append('"mes" = ?')
+            parametros.append(int(mes))
+        if anio.isdigit():
+            condiciones.append('"año_1" = ?')
+            parametros.append(int(anio))
         
         where = " AND ".join(condiciones) if condiciones else ""
         sql = f"""
