@@ -162,7 +162,26 @@ def procesar_valor(columna, valor):
     return limpiar_numero(valor)
 
 # ==================================================
-# HTML (igual que antes)
+# OBTENER NOMBRES DE COLUMNA DESDE LA BASE DE DATOS
+# ==================================================
+
+def get_column_names(client, table_name="datos_completos"):
+    """Obtiene los nombres de columna reales usando PRAGMA table_info"""
+    try:
+        pragma_sql = f"PRAGMA table_info({table_name})"
+        result = client.execute(pragma_sql)
+        if hasattr(result, 'rows') and callable(result.rows):
+            rows = result.rows()
+        else:
+            rows = list(result)
+        # La columna 'name' es la segunda (índice 1)
+        return [row[1] for row in rows]
+    except Exception as e:
+        logger.error(f"❌ Error en get_column_names: {str(e)}")
+        return []
+
+# ==================================================
+# HTML
 # ==================================================
 
 HTML = """
@@ -211,24 +230,34 @@ function buscar(){
     let tipo = document.getElementById('tipo').value;
     let distrito = document.getElementById('distrito').value;
     fetch(`/buscar?q=${encodeURIComponent(q)}&tipo=${tipo}&distrito=${encodeURIComponent(distrito)}`)
-    .then(r=>r.json())
-    .then(data=>{
+    .then(r => r.json())
+    .then(data => {
+        // Si la respuesta tiene un error, mostrarlo
+        if (data.error) {
+            document.getElementById('resultado').innerHTML = `<p style="color:red;">❌ Error del servidor: ${data.error}</p>`;
+            return;
+        }
+        // Si no hay columnas o rows, mostrar mensaje
+        if (!data.columnas || !data.rows) {
+            document.getElementById('resultado').innerHTML = '<p>⚠️ No se encontraron resultados o la respuesta es inválida.</p>';
+            return;
+        }
         let html = '';
         html += `<p>Total resultados: ${data.total}</p>`;
         html += '<div style="overflow:auto; max-height:700px;">';
         html += '<table><tr>';
-        data.columnas.forEach(c=>{ html += `<th>${c}</th>`; });
+        data.columnas.forEach(c => { html += `<th>${c}</th>`; });
         html += '</tr>';
-        data.rows.forEach(r=>{
+        data.rows.forEach(r => {
             html += '<tr>';
-            r.forEach(c=>{ html += `<td>${c ?? ''}</td>`; });
+            r.forEach(c => { html += `<td>${c ?? ''}</td>`; });
             html += '</tr>';
         });
         html += '</table></div>';
         document.getElementById('resultado').innerHTML = html;
     })
     .catch(err => {
-        document.getElementById('resultado').innerHTML = '<p style="color:red;">❌ Error al buscar: ' + err + '</p>';
+        document.getElementById('resultado').innerHTML = `<p style="color:red;">❌ Error al buscar: ${err}</p>`;
     });
 }
 function exportarExcel(){
@@ -251,25 +280,6 @@ function exportarExcel(){
 def index():
     return render_template_string(HTML)
 
-# ==================================================
-# OBTENER NOMBRES DE COLUMNA DESDE LA BASE DE DATOS
-# ==================================================
-
-def get_column_names(client, table_name="datos_completos"):
-    """Obtiene los nombres de columna reales usando PRAGMA table_info"""
-    pragma_sql = f"PRAGMA table_info({table_name})"
-    result = client.execute(pragma_sql)
-    if hasattr(result, 'rows') and callable(result.rows):
-        rows = result.rows()
-    else:
-        rows = list(result)
-    # La columna 'name' es la segunda (índice 1)
-    return [row[1] for row in rows]
-
-# ==================================================
-# BUSQUEDA
-# ==================================================
-
 @app.route('/buscar')
 @auth.login_required
 def buscar():
@@ -285,6 +295,15 @@ def buscar():
         # Obtener nombres de columna reales
         columnas_reales = get_column_names(client)
         logger.info(f"📋 Columnas reales: {columnas_reales[:5]}...")
+        
+        if not columnas_reales:
+            client.close()
+            return jsonify({
+                "rows": [],
+                "columnas": [],
+                "total": 0,
+                "error": "No se encontraron columnas en la tabla"
+            })
         
         # Mapeo de los tipos de búsqueda a nombres de columna reales
         mapa = {
@@ -348,15 +367,20 @@ def buscar():
         
         client.close()
         logger.info(f"✅ Resultados devueltos: {len(resultados)}")
-        return jsonify({"rows": resultados, "columnas": titulos_columnas, "total": len(resultados)})
+        return jsonify({
+            "rows": resultados,
+            "columnas": titulos_columnas,
+            "total": len(resultados)
+        })
     
     except Exception as e:
         logger.error(f"❌ Error en /buscar: {str(e)}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
-
-# ==================================================
-# EXPORTAR A EXCEL
-# ==================================================
+        return jsonify({
+            "rows": [],
+            "columnas": [],
+            "total": 0,
+            "error": str(e)
+        })
 
 @app.route('/exportar')
 @auth.login_required
@@ -368,6 +392,10 @@ def exportar():
     try:
         client = get_turso_client()
         columnas_reales = get_column_names(client)
+        
+        if not columnas_reales:
+            client.close()
+            return jsonify({"error": "No se encontraron columnas"}), 400
         
         mapa = {
             "nombre_nino": "nombre_de_la_niña_o_del_niño",
@@ -431,10 +459,6 @@ def exportar():
     except Exception as e:
         logger.error(f"❌ Error en /exportar: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
-
-# ==================================================
-# INICIO
-# ==================================================
 
 if __name__ == '__main__':
     logger.info("🚀 Servidor iniciado...")
