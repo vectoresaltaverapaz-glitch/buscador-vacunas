@@ -34,15 +34,35 @@ def get_turso_client():
     return libsql_client.create_client_sync(url=url, auth_token=token)
 
 # ==================================================
-# RENOMBRES (nombre actual en BD → título bonito)
+# COLUMNAS REALES (lista fija - todas las columnas de la BD)
+# ==================================================
+
+COLUMNAS_REALES = [
+    "rowid", "año", "no.", "área", "distrito", "servicio",
+    "departamento", "municipio", "cui_nino", "nombre_nino",
+    "día", "mes", "año_1", "departamento.1", "municipio.1",
+    "comunidad", "hombre", "mujer", "pueblo", "comunidad.1",
+    "cui_responsable", "nombre_responsable", "día.1", "mes.1",
+    "año.1", "departamento.2", "municipio.2", "comunidad.2",
+    "calle,_avenida,_zona,_lote,", "telefono", "falleció",
+    "hep._b", "bcg", "1a._(fipv)", "2a._(fipv)", "1a._(ipv)",
+    "1a._(historico)", "2a._(opv)", "3a._(opv)", "1a.", "2a.",
+    "3a.", "1a..1", "2a..1", "1a..2", "2a..2", "spr_1",
+    "neumo-_r1", "spr_2", "r1_(opv)", "r1_(dpt)", "r2_(opv)",
+    "r2_(dpt)", "1a..3", "2a..3", "1a..4", "2a..4", "1a..5",
+    "2a..5", "1a._(fipv).1", "2a._(fipv).1", "1a._(ipv).1",
+    "1a._(historico).1", "2a._(opv).1", "3a._(opv).1",
+    "r1_(opv).1", "r2_(opv).1", "1a..6", "2a..6", "3a..1",
+    "r1", "r2", "spr_1.1", "spr_2.1", "1a..7", "2a..7", "3a..2"
+]
+
+# ==================================================
+# RENOMBRES (títulos bonitos para mostrar en pantalla)
 # ==================================================
 
 RENOMBRES = {
-    "rowid": "ID",
     "año": "Año",
-    "no.": "No",
-    "área": "Área Salud",
-    "distrito": "Distrito Salud",
+    "distrito": "Distrito",
     "servicio": "Servicio Salud",
     "departamento": "Departamento",
     "municipio": "Municipio",
@@ -52,7 +72,8 @@ RENOMBRES = {
     "nombre_responsable": "Nombre Responsable",
     "telefono": "Teléfono",
     "falleció": "Falleció",
-    # Vacunas
+    "genero": "Género",
+    # Vacunas con rangos de edad
     "hep._b": "Hepatitis B (<1 año)",
     "bcg": "BCG (<1 año)",
     "1a._(fipv)": "Polio 1 (<1 año)",
@@ -102,7 +123,7 @@ RENOMBRES = {
 }
 
 # ==================================================
-# COLUMNAS FECHA (nombres actuales en BD)
+# COLUMNAS FECHA (para convertir números a fecha)
 # ==================================================
 
 COLUMNAS_FECHA = {
@@ -127,6 +148,18 @@ COLUMNAS_FECHA = {
     "spr_1.1", "spr_2.1",
     "1a..7", "2a..7", "3a..2"
 }
+
+# ==================================================
+# COLUMNAS EXCLUIDAS (no se muestran en la tabla)
+# ==================================================
+
+COLUMNAS_EXCLUIDAS = [
+    "rowid", "no.", "área", "pueblo", "comunidad",
+    "departamento.1", "municipio.1", "comunidad.1",
+    "comunidad.2", "calle,_avenida,_zona,_lote,",
+    "día", "mes", "año_1", "día.1", "mes.1", "año.1",
+    "hombre", "mujer"  # Estas se reemplazan por "genero"
+]
 
 # ==================================================
 # FUNCIONES DE PROCESAMIENTO
@@ -161,38 +194,20 @@ def procesar_valor(columna, valor):
         return convertir_fecha_excel(valor)
     return limpiar_numero(valor)
 
-# ==================================================
-# COLUMNAS REALES (lista fija)
-# ==================================================
-
-COLUMNAS_REALES = [
-    "rowid", "año", "no.", "área", "distrito", "servicio",
-    "departamento", "municipio", "cui_nino", "nombre_nino",
-    "día", "mes", "año_1", "departamento.1", "municipio.1",
-    "comunidad", "hombre", "mujer", "pueblo", "comunidad.1",
-    "cui_responsable", "nombre_responsable", "día.1", "mes.1",
-    "año.1", "departamento.2", "municipio.2", "comunidad.2",
-    "calle,_avenida,_zona,_lote,", "telefono", "falleció",
-    "hep._b", "bcg", "1a._(fipv)", "2a._(fipv)", "1a._(ipv)",
-    "1a._(historico)", "2a._(opv)", "3a._(opv)", "1a.", "2a.",
-    "3a.", "1a..1", "2a..1", "1a..2", "2a..2", "spr_1",
-    "neumo-_r1", "spr_2", "r1_(opv)", "r1_(dpt)", "r2_(opv)",
-    "r2_(dpt)", "1a..3", "2a..3", "1a..4", "2a..4", "1a..5",
-    "2a..5", "1a._(fipv).1", "2a._(fipv).1", "1a._(ipv).1",
-    "1a._(historico).1", "2a._(opv).1", "3a._(opv).1",
-    "r1_(opv).1", "r2_(opv).1", "1a..6", "2a..6", "3a..1",
-    "r1", "r2", "spr_1.1", "spr_2.1", "1a..7", "2a..7", "3a..2"
-]
+def obtener_genero(row):
+    """Determina el género basado en las columnas 'hombre' y 'mujer'."""
+    hombre = row.get("hombre")
+    mujer = row.get("mujer")
+    if hombre == 'X':
+        return "Hombre"
+    elif mujer == 'X':
+        return "Mujer"
+    else:
+        return "No especificado"
 
 # ==================================================
-# HTML CON DISTRITOS COMPLETOS Y NUEVOS CAMPOS
+# HTML
 # ==================================================
-
-DISTRITOS = [
-    "COBAN", "SAN PEDRO CARCHA", "TACTIC", "LANQUIN", "CHISEC",
-    "CAHABON", "SENAHU", "FRAY BARTOLOME", "PANZOS", "SAN JUAN CHAMELCO",
-    "SENAHU", "TUCURU", "TAMAHU", "SANTA CRUZ VERAPAZ", "CAMPUR"
-]
 
 HTML = """
 <!DOCTYPE html>
@@ -204,6 +219,7 @@ HTML = """
 body{ font-family:Arial; background:#eef2f7; padding:20px; }
 .container{ background:white; padding:20px; border-radius:10px; }
 input,select,button{ padding:10px; margin:5px; }
+.filtros{ margin-bottom:15px; }
 table{ width:100%; border-collapse:collapse; margin-top:20px; font-size:12px; }
 th,td{ border:1px solid #ccc; padding:5px; }
 th{ background:#1e466e; color:white; position:sticky; top:0; }
@@ -212,52 +228,92 @@ th{ background:#1e466e; color:white; position:sticky; top:0; }
 <body>
 <div class="container">
 <h2>🔍 Buscador SIGSA</h2>
-<select id="distrito">
-<option value="">TODOS LOS DISTRITOS</option>
-""" + "\n".join([f'<option value="{d}">{d}</option>' for d in DISTRITOS]) + """
-</select>
 
-<select id="tipo">
-<option value="nombre_nino">Nombre Niño</option>
-<option value="nombre_responsable">Nombre Responsable</option>
-<option value="cui_nino">CUI Niño</option>
-<option value="cui_responsable">CUI Responsable</option>
-</select>
+<div class="filtros">
+    <select id="distrito">
+        <option value="">TODOS LOS DISTRITOS</option>
+        <option value="COBAN">COBAN</option>
+        <option value="SAN PEDRO CARCHA">SAN PEDRO CARCHA</option>
+        <option value="TACTIC">TACTIC</option>
+        <option value="LANQUIN">LANQUIN</option>
+        <option value="CHISEC">CHISEC</option>
+        <option value="CAHABON">CAHABON</option>
+        <option value="SENAHU">SENAHU</option>
+        <option value="FRAY BARTOLOME">FRAY BARTOLOME</option>
+        <option value="PANZÓS">PANZÓS</option>
+        <option value="SAN JUAN CHAMELCO">SAN JUAN CHAMELCO</option>
+        <option value="TUCURÚ">TUCURÚ</option>
+        <option value="TAMAHÚ">TAMAHÚ</option>
+        <option value="SANTA CRUZ VERAPAZ">SANTA CRUZ VERAPAZ</option>
+        <option value="CAMPUR">CAMPUR</option>
+        <option value="COBÁN">COBÁN</option>
+        <option value="RAXRUHA">RAXRUHA</option>
+        <option value="CHAHAL">CHAHAL</option>
+        <option value="LA TINTA">LA TINTA</option>
+        <option value="TELEMÁN">TELEMÁN</option>
+    </select>
 
-<input type="text" id="search" placeholder="Buscar...">
+    <select id="tipo">
+        <option value="nombre_nino">Nombre Niño</option>
+        <option value="nombre_responsable">Nombre Responsable</option>
+        <option value="cui_nino">CUI Niño</option>
+        <option value="cui_responsable">CUI Responsable</option>
+        <option value="servicio">Servicio Salud</option>
+    </select>
 
-<!-- Nuevos campos de búsqueda -->
-<div style="margin-top:10px;">
-    <label>Fecha de nacimiento: Día <input type="text" id="dia_nac" placeholder="DD" size="3">
-    Mes <input type="text" id="mes_nac" placeholder="MM" size="3">
-    Año <input type="text" id="anio_nac" placeholder="YYYY" size="5"></label>
+    <input type="text" id="search" placeholder="Buscar...">
+
+    <div style="margin-top:10px;">
+        <label>Fecha Nacimiento Niño:</label>
+        <input type="number" id="dia_nac" placeholder="Día" style="width:60px;">
+        <input type="number" id="mes_nac" placeholder="Mes" style="width:60px;">
+        <input type="number" id="ano_nac" placeholder="Año" style="width:80px;">
+
+        <label style="margin-left:15px;">Fecha Nacimiento Responsable:</label>
+        <input type="number" id="dia_madre" placeholder="Día" style="width:60px;">
+        <input type="number" id="mes_madre" placeholder="Mes" style="width:60px;">
+        <input type="number" id="ano_madre" placeholder="Año" style="width:80px;">
+    </div>
+
+    <div style="margin-top:10px;">
+        <button onclick="buscar()">Buscar</button>
+        <button onclick="exportarExcel()">Exportar Excel</button>
+        <span style="margin-left:15px;font-size:14px;color:#555;">Mostrando hasta 150 registros</span>
+    </div>
 </div>
 
-<button onclick="buscar()">Buscar</button>
-<button onclick="exportarExcel()">Exportar Excel</button>
 <div id="resultado"></div>
 </div>
+
 <script>
 function buscar(){
     let q = document.getElementById('search').value;
     let tipo = document.getElementById('tipo').value;
     let distrito = document.getElementById('distrito').value;
-    let dia = document.getElementById('dia_nac').value;
-    let mes = document.getElementById('mes_nac').value;
-    let anio = document.getElementById('anio_nac').value;
+    let dia_nac = document.getElementById('dia_nac').value;
+    let mes_nac = document.getElementById('mes_nac').value;
+    let ano_nac = document.getElementById('ano_nac').value;
+    let dia_madre = document.getElementById('dia_madre').value;
+    let mes_madre = document.getElementById('mes_madre').value;
+    let ano_madre = document.getElementById('ano_madre').value;
+
     let url = `/buscar?q=${encodeURIComponent(q)}&tipo=${tipo}&distrito=${encodeURIComponent(distrito)}`;
-    if (dia) url += `&dia=${encodeURIComponent(dia)}`;
-    if (mes) url += `&mes=${encodeURIComponent(mes)}`;
-    if (anio) url += `&anio=${encodeURIComponent(anio)}`;
+    if (dia_nac) url += `&dia_nac=${dia_nac}`;
+    if (mes_nac) url += `&mes_nac=${mes_nac}`;
+    if (ano_nac) url += `&ano_nac=${ano_nac}`;
+    if (dia_madre) url += `&dia_madre=${dia_madre}`;
+    if (mes_madre) url += `&mes_madre=${mes_madre}`;
+    if (ano_madre) url += `&ano_madre=${ano_madre}`;
+
     fetch(url)
     .then(r => r.json())
     .then(data => {
         if (data.error) {
-            document.getElementById('resultado').innerHTML = `<p style="color:red;">❌ Error del servidor:</p><pre style="background:#fdd;padding:10px;border-radius:5px;white-space:pre-wrap;">${data.error}</pre>`;
+            document.getElementById('resultado').innerHTML = `<p style="color:red;">❌ Error: ${data.error}</p>`;
             return;
         }
         if (!data.columnas || !data.rows) {
-            document.getElementById('resultado').innerHTML = '<p>⚠️ No se encontraron resultados o la respuesta es inválida.</p>';
+            document.getElementById('resultado').innerHTML = '<p>⚠️ No se encontraron resultados.</p>';
             return;
         }
         let html = '';
@@ -275,20 +331,29 @@ function buscar(){
         document.getElementById('resultado').innerHTML = html;
     })
     .catch(err => {
-        document.getElementById('resultado').innerHTML = `<p style="color:red;">❌ Error de red o servidor: ${err}</p>`;
+        document.getElementById('resultado').innerHTML = `<p style="color:red;">❌ Error: ${err}</p>`;
     });
 }
+
 function exportarExcel(){
     let q = document.getElementById('search').value;
     let tipo = document.getElementById('tipo').value;
     let distrito = document.getElementById('distrito').value;
-    let dia = document.getElementById('dia_nac').value;
-    let mes = document.getElementById('mes_nac').value;
-    let anio = document.getElementById('anio_nac').value;
+    let dia_nac = document.getElementById('dia_nac').value;
+    let mes_nac = document.getElementById('mes_nac').value;
+    let ano_nac = document.getElementById('ano_nac').value;
+    let dia_madre = document.getElementById('dia_madre').value;
+    let mes_madre = document.getElementById('mes_madre').value;
+    let ano_madre = document.getElementById('ano_madre').value;
+
     let url = `/exportar?q=${encodeURIComponent(q)}&tipo=${tipo}&distrito=${encodeURIComponent(distrito)}`;
-    if (dia) url += `&dia=${encodeURIComponent(dia)}`;
-    if (mes) url += `&mes=${encodeURIComponent(mes)}`;
-    if (anio) url += `&anio=${encodeURIComponent(anio)}`;
+    if (dia_nac) url += `&dia_nac=${dia_nac}`;
+    if (mes_nac) url += `&mes_nac=${mes_nac}`;
+    if (ano_nac) url += `&ano_nac=${ano_nac}`;
+    if (dia_madre) url += `&dia_madre=${dia_madre}`;
+    if (mes_madre) url += `&mes_madre=${mes_madre}`;
+    if (ano_madre) url += `&ano_madre=${ano_madre}`;
+
     window.location.href = url;
 }
 </script>
@@ -311,11 +376,14 @@ def buscar():
     query = request.args.get('q', '').strip()
     tipo = request.args.get('tipo', 'nombre_nino')
     distrito = request.args.get('distrito', '').strip()
-    dia = request.args.get('dia', '').strip()
-    mes = request.args.get('mes', '').strip()
-    anio = request.args.get('anio', '').strip()
+    dia_nac = request.args.get('dia_nac', '').strip()
+    mes_nac = request.args.get('mes_nac', '').strip()
+    ano_nac = request.args.get('ano_nac', '').strip()
+    dia_madre = request.args.get('dia_madre', '').strip()
+    mes_madre = request.args.get('mes_madre', '').strip()
+    ano_madre = request.args.get('ano_madre', '').strip()
     
-    logger.info(f"🔍 Búsqueda: query='{query}', tipo='{tipo}', distrito='{distrito}', dia='{dia}', mes='{mes}', anio='{anio}'")
+    logger.info(f"🔍 Búsqueda: query='{query}', tipo='{tipo}', distrito='{distrito}'")
     
     try:
         client = get_turso_client()
@@ -324,13 +392,16 @@ def buscar():
             "nombre_nino": "nombre_nino",
             "nombre_responsable": "nombre_responsable",
             "cui_nino": "cui_nino",
-            "cui_responsable": "cui_responsable"
+            "cui_responsable": "cui_responsable",
+            "servicio": "servicio"
         }
         columna_busqueda = mapa.get(tipo, "nombre_nino")
         logger.info(f"📌 Columna de búsqueda: '{columna_busqueda}'")
         
         condiciones = []
         parametros = []
+        
+        # Búsqueda por texto
         if query:
             if "cui" in tipo:
                 condiciones.append(f'"{columna_busqueda}" = ?')
@@ -338,25 +409,39 @@ def buscar():
             else:
                 condiciones.append(f'"{columna_busqueda}" LIKE ?')
                 parametros.append(f"%{query}%")
+        
+        # Filtro por distrito
         if distrito:
             condiciones.append('UPPER("distrito") LIKE ?')
             parametros.append(f"%{distrito.upper()}%")
-        # Fecha de nacimiento (día, mes, año)
-        if dia.isdigit():
+        
+        # Filtro por fecha de nacimiento del niño
+        if dia_nac:
             condiciones.append('"día" = ?')
-            parametros.append(int(dia))
-        if mes.isdigit():
+            parametros.append(dia_nac)
+        if mes_nac:
             condiciones.append('"mes" = ?')
-            parametros.append(int(mes))
-        if anio.isdigit():
-            condiciones.append('"año_1" = ?')  # La columna de año de nacimiento se llama "año_1"
-            parametros.append(int(anio))
+            parametros.append(mes_nac)
+        if ano_nac:
+            condiciones.append('"año_1" = ?')
+            parametros.append(ano_nac)
+        
+        # Filtro por fecha de nacimiento del responsable
+        if dia_madre:
+            condiciones.append('"día.1" = ?')
+            parametros.append(dia_madre)
+        if mes_madre:
+            condiciones.append('"mes.1" = ?')
+            parametros.append(mes_madre)
+        if ano_madre:
+            condiciones.append('"año.1" = ?')
+            parametros.append(ano_madre)
         
         where = " AND ".join(condiciones) if condiciones else ""
         sql = f"""
         SELECT * FROM datos_completos
         {f'WHERE {where}' if where else ''}
-        LIMIT 50
+        LIMIT 150
         """
         logger.info(f"📝 SQL: {sql}")
         logger.info(f"📦 Parámetros: {parametros}")
@@ -375,8 +460,15 @@ def buscar():
         
         rows_dict = [dict(zip(COLUMNAS_REALES, row)) for row in rows]
         
-        columnas_excluir = ["día", "mes", "año_1", "hombre", "mujer"]
-        columnas_finales = [c for c in COLUMNAS_REALES if c not in columnas_excluir]
+        # Calcular género para cada fila
+        for row in rows_dict:
+            row["genero"] = obtener_genero(row)
+        
+        # Definir columnas a mostrar: las columnas reales excluyendo las excluidas y añadiendo "genero"
+        columnas_finales = [c for c in COLUMNAS_REALES if c not in COLUMNAS_EXCLUIDAS]
+        # Agregar "genero" al final (o donde quieras)
+        columnas_finales.append("genero")
+        
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
         
         resultados = []
@@ -402,10 +494,10 @@ def buscar():
         })
 
 # ==================================================
-# EXPORTAR CON LÍMITE DE REGISTROS
+# EXPORTAR CON LÍMITE SEGURO
 # ==================================================
 
-MAX_EXPORT_ROWS = 1000
+MAX_EXPORT_ROWS = 500
 
 @app.route('/exportar')
 @auth.login_required
@@ -413,9 +505,12 @@ def exportar():
     query = request.args.get('q', '').strip()
     tipo = request.args.get('tipo', 'nombre_nino')
     distrito = request.args.get('distrito', '').strip()
-    dia = request.args.get('dia', '').strip()
-    mes = request.args.get('mes', '').strip()
-    anio = request.args.get('anio', '').strip()
+    dia_nac = request.args.get('dia_nac', '').strip()
+    mes_nac = request.args.get('mes_nac', '').strip()
+    ano_nac = request.args.get('ano_nac', '').strip()
+    dia_madre = request.args.get('dia_madre', '').strip()
+    mes_madre = request.args.get('mes_madre', '').strip()
+    ano_madre = request.args.get('ano_madre', '').strip()
     
     try:
         client = get_turso_client()
@@ -424,12 +519,14 @@ def exportar():
             "nombre_nino": "nombre_nino",
             "nombre_responsable": "nombre_responsable",
             "cui_nino": "cui_nino",
-            "cui_responsable": "cui_responsable"
+            "cui_responsable": "cui_responsable",
+            "servicio": "servicio"
         }
         columna_busqueda = mapa.get(tipo, "nombre_nino")
         
         condiciones = []
         parametros = []
+        
         if query:
             if "cui" in tipo:
                 condiciones.append(f'"{columna_busqueda}" = ?')
@@ -437,18 +534,30 @@ def exportar():
             else:
                 condiciones.append(f'"{columna_busqueda}" LIKE ?')
                 parametros.append(f"%{query}%")
+        
         if distrito:
             condiciones.append('UPPER("distrito") LIKE ?')
             parametros.append(f"%{distrito.upper()}%")
-        if dia.isdigit():
+        
+        if dia_nac:
             condiciones.append('"día" = ?')
-            parametros.append(int(dia))
-        if mes.isdigit():
+            parametros.append(dia_nac)
+        if mes_nac:
             condiciones.append('"mes" = ?')
-            parametros.append(int(mes))
-        if anio.isdigit():
+            parametros.append(mes_nac)
+        if ano_nac:
             condiciones.append('"año_1" = ?')
-            parametros.append(int(anio))
+            parametros.append(ano_nac)
+        
+        if dia_madre:
+            condiciones.append('"día.1" = ?')
+            parametros.append(dia_madre)
+        if mes_madre:
+            condiciones.append('"mes.1" = ?')
+            parametros.append(mes_madre)
+        if ano_madre:
+            condiciones.append('"año.1" = ?')
+            parametros.append(ano_madre)
         
         where = " AND ".join(condiciones) if condiciones else ""
         sql = f"""
@@ -481,13 +590,19 @@ def exportar():
         
         rows_dict = [dict(zip(COLUMNAS_REALES, row)) for row in rows]
         
+        # Calcular género
+        for row in rows_dict:
+            row["genero"] = obtener_genero(row)
+        
         wb = Workbook()
         ws = wb.active
         ws.title = "Resultados"
         
-        columnas_excluir = ["día", "mes", "año_1", "hombre", "mujer"]
-        columnas_finales = [c for c in COLUMNAS_REALES if c not in columnas_excluir]
+        # Definir columnas a mostrar
+        columnas_finales = [c for c in COLUMNAS_REALES if c not in COLUMNAS_EXCLUIDAS]
+        columnas_finales.append("genero")
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
+        
         ws.append(titulos_columnas)
         for cell in ws[1]:
             cell.font = Font(bold=True, color="FFFFFF")
@@ -512,6 +627,10 @@ def exportar():
     except Exception as e:
         logger.error(f"❌ Error en /exportar: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
+
+# ==================================================
+# INICIO
+# ==================================================
 
 if __name__ == '__main__':
     logger.info("🚀 Servidor iniciado...")
