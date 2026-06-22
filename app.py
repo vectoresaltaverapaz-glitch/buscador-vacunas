@@ -34,7 +34,7 @@ def get_turso_client():
     return libsql_client.create_client_sync(url=url, auth_token=token)
 
 # ==================================================
-# RENOMBRES (SOLO COLUMNAS QUE REALMENTE USAS)
+# RENOMBRES (nombre original de columna → título bonito)
 # ==================================================
 
 RENOMBRES = {
@@ -52,56 +52,62 @@ RENOMBRES = {
     "nombre_de_la_madre_padre_o_responsable": "Nombre Responsable",
     "teléfono": "Teléfono",
     "falleció": "Falleció",
-    "hep._b": "Hepatitis B",
-    "bcg": "BCG",
-    "1a._(fipv)": "Polio 1",
-    "2a._(fipv)": "Polio 2",
-    "1a._(ipv)": "Polio 3",
-    "1a._(historico)": "Polio Histórico",
-    "2a._(opv)": "OPV 2",
-    "3a._(opv)": "OPV 3",
-    "1a.": "Pentavalente 1",
-    "2a.": "Pentavalente 2",
-    "3a.": "Pentavalente 3",
-    "1a..1": "Rotavirus 1",
-    "2a..1": "Rotavirus 2",
-    "1a..2": "Neumococo 1",
-    "2a..2": "Neumococo 2",
-    "spr_1": "SPR 1",
-    "neumo-_r1": "Neumo R1",
-    "spr_2": "SPR 2",
-    "r1_(opv)": "Refuerzo 1 OPV",
-    "r1_(dpt)": "Refuerzo 1 DPT",
-    "r2_(opv)": "Refuerzo 2 OPV",
-    "r2_(dpt)": "Refuerzo 2 DPT",
-    "1a..3": "Vitamina A 1",
-    "2a..3": "Vitamina A 2",
-    "1a..4": "SRP 1",
-    "2a..4": "SRP 2",
-    "1a..5": "TD 1",
-    "2a..5": "TD 2",
-    "1a._(fipv).1": "Polio 1 Refuerzo",
-    "2a._(fipv).1": "Polio 2 Refuerzo",
-    "1a._(ipv).1": "Polio IPV Refuerzo",
-    "1a._(historico).1": "Histórico Refuerzo",
-    "2a._(opv).1": "OPV 2 Refuerzo",
-    "3a._(opv).1": "OPV 3 Refuerzo",
-    "r1_(opv).1": "Refuerzo OPV 1",
-    "r2_(opv).1": "Refuerzo OPV 2",
-    "1a..6": "Esquema 1",
-    "2a..6": "Esquema 2",
-    "3a..1": "Esquema 3",
-    "r1": "Refuerzo 1",
-    "r2": "Refuerzo 2",
-    "spr_1.1": "SPR Refuerzo 1",
-    "spr_2.1": "SPR Refuerzo 2",
-    "1a..7": "Dosis 1",
-    "2a..7": "Dosis 2",
-    "3a..": "Dosis 3"
+    # Vacunas con rangos de edad
+    "hep._b": "Hepatitis B (<1 año)",
+    "bcg": "BCG (<1 año)",
+    "1a._(fipv)": "Polio 1 (<1 año)",
+    "2a._(fipv)": "Polio 2 (<1 año)",
+    "1a._(ipv)": "Polio IPV (<1 año)",
+    "1a._(historico)": "Polio Histórico (<1 año)",
+    "2a._(opv)": "OPV 2 (<1 año)",
+    "3a._(opv)": "OPV 3 (<1 año)",
+    "1a.": "Pentavalente 1 (<1 año)",
+    "2a.": "Pentavalente 2 (<1 año)",
+    "3a.": "Pentavalente 3 (<1 año)",
+    "1a..1": "Rotavirus 1 (<1 año)",
+    "2a..1": "Rotavirus 2 (<1 año)",
+    "1a..2": "Neumococo 1 (<1 año)",
+    "2a..2": "Neumococo 2 (<1 año)",
+    "spr_1": "SPR 1 (12 meses)",
+    "neumo-_r1": "Neumococo R1 (12 meses)",
+    "spr_2": "SPR 2 (18 meses)",
+    "r1_(opv)": "Refuerzo OPV (18 meses)",
+    "r1_(dpt)": "Refuerzo DPT (18 meses)",
+    "r2_(opv)": "Refuerzo OPV (4-7 años)",
+    "r2_(dpt)": "Refuerzo DPT (4-7 años)",
+    "1a..3": "Influenza 1 (6-11 meses)",
+    "2a..3": "Influenza 2 (6-11 meses)",
+    "1a..4": "Influenza 1 (12-23 meses)",
+    "2a..4": "Influenza 2 (12-23 meses)",
+    "1a..5": "Influenza 1 (24-35 meses)",
+    "2a..5": "Influenza 2 (24-35 meses)",
+    "1a._(fipv).1": "Polio fIPV 1 (1-7 años)",
+    "2a._(fipv).1": "Polio fIPV 2 (1-7 años)",
+    "1a._(ipv).1": "Polio IPV Refuerzo (1-7 años)",
+    "1a._(historico).1": "Polio Histórico Refuerzo (1-7 años)",
+    "2a._(opv).1": "OPV 2 Refuerzo (1-7 años)",
+    "3a._(opv).1": "OPV 3 Refuerzo (1-7 años)",
+    "r1_(opv).1": "Refuerzo OPV 1 (1-7 años)",
+    "r2_(opv).1": "Refuerzo OPV 2 (1-7 años)",
+    "1a..6": "Pentavalente Ref 1 (1-7 años)",
+    "2a..6": "Pentavalente Ref 2 (1-7 años)",
+    "3a..1": "Pentavalente Ref 3 (1-7 años)",
+    "r1": "Refuerzo 1 (1-7 años)",
+    "r2": "Refuerzo 2 (1-7 años)",
+    "spr_1.1": "SPR Refuerzo 1 (1-7 años)",
+    "spr_2.1": "SPR Refuerzo 2 (1-7 años)",
+    "1a..7": "Otras Vacunas 1 (1-7 años)",
+    "2a..7": "Otras Vacunas 2 (1-7 años)",
+    "3a..2": "Otras Vacunas 3 (1-7 años)"
 }
 
+# ==================================================
+# COLUMNAS FECHA (nombres originales que deben formatearse como fecha)
+# ==================================================
+
 COLUMNAS_FECHA = {
-    "hep._b", "bcg", "1a._(fipv)", "2a._(fipv)", "1a._(ipv)",
+    "hep._b", "bcg",
+    "1a._(fipv)", "2a._(fipv)", "1a._(ipv)",
     "1a._(historico)", "2a._(opv)", "3a._(opv)",
     "1a.", "2a.", "3a.",
     "1a..1", "2a..1",
@@ -119,7 +125,7 @@ COLUMNAS_FECHA = {
     "1a..6", "2a..6", "3a..1",
     "r1", "r2",
     "spr_1.1", "spr_2.1",
-    "1a..7", "2a..7", "3a.."
+    "1a..7", "2a..7", "3a..2"
 }
 
 # ==================================================
@@ -156,7 +162,7 @@ def procesar_valor(columna, valor):
     return limpiar_numero(valor)
 
 # ==================================================
-# HTML (igual, sin cambios)
+# HTML (igual que antes)
 # ==================================================
 
 HTML = """
@@ -245,6 +251,25 @@ function exportarExcel(){
 def index():
     return render_template_string(HTML)
 
+# ==================================================
+# OBTENER NOMBRES DE COLUMNA DESDE LA BASE DE DATOS
+# ==================================================
+
+def get_column_names(client, table_name="datos_completos"):
+    """Obtiene los nombres de columna reales usando PRAGMA table_info"""
+    pragma_sql = f"PRAGMA table_info({table_name})"
+    result = client.execute(pragma_sql)
+    if hasattr(result, 'rows') and callable(result.rows):
+        rows = result.rows()
+    else:
+        rows = list(result)
+    # La columna 'name' es la segunda (índice 1)
+    return [row[1] for row in rows]
+
+# ==================================================
+# BUSQUEDA
+# ==================================================
+
 @app.route('/buscar')
 @auth.login_required
 def buscar():
@@ -256,30 +281,36 @@ def buscar():
     
     try:
         client = get_turso_client()
+        
+        # Obtener nombres de columna reales
+        columnas_reales = get_column_names(client)
+        logger.info(f"📋 Columnas reales: {columnas_reales[:5]}...")
+        
+        # Mapeo de los tipos de búsqueda a nombres de columna reales
         mapa = {
             "nombre_nino": "nombre_de_la_niña_o_del_niño",
             "nombre_responsable": "nombre_de_la_madre_padre_o_responsable",
             "cui_nino": "código_único_de_identificación",
             "cui_responsable": "cui"
         }
-        columna = mapa[tipo]
-        logger.info(f"📌 Columna mapeada: '{columna}'")
+        columna_busqueda = mapa.get(tipo, "nombre_de_la_niña_o_del_niño")
+        logger.info(f"📌 Columna de búsqueda: '{columna_busqueda}'")
         
         condiciones = []
         parametros = []
         if query:
             if "cui" in tipo:
-                condiciones.append(f'"{columna}" = ?')
+                condiciones.append(f'"{columna_busqueda}" = ?')
                 parametros.append(query)
             else:
-                condiciones.append(f'"{columna}" LIKE ?')
+                condiciones.append(f'"{columna_busqueda}" LIKE ?')
                 parametros.append(f"%{query}%")
         if distrito:
             condiciones.append('UPPER("distrito") LIKE ?')
             parametros.append(f"%{distrito.upper()}%")
         
         where = " AND ".join(condiciones) if condiciones else ""
-        # LÍMITE REDUCIDO A 30 PARA EVITAR TIMEOUT
+        # Límite reducido para evitar timeout
         sql = f"""
         SELECT * FROM datos_completos
         {f'WHERE {where}' if where else ''}
@@ -288,29 +319,9 @@ def buscar():
         logger.info(f"📝 SQL: {sql}")
         logger.info(f"📦 Parámetros: {parametros}")
         
-        # Ejecutar consulta principal
         result = client.execute(sql, parametros)
         
-        # OBTENER NOMBRES DE COLUMNA REALES
-        columns = []
-        # libsql_client devuelve ResultSet con attribute 'columns' como lista
-        if hasattr(result, 'columns') and callable(result.columns):
-            columns = result.columns()
-            logger.info(f"📋 Columnas desde columns(): {columns[:5]}...")  # mostrar primeras 5
-        elif hasattr(result, 'description') and result.description:
-            columns = [col[0] for col in result.description]
-            logger.info(f"📋 Columnas desde description: {columns[:5]}...")
-        else:
-            # Fallback: si result es lista de tuplas, intentar obtener de la primera fila
-            rows = result.rows() if hasattr(result, 'rows') and callable(result.rows) else list(result)
-            if rows and isinstance(rows[0], dict):
-                columns = list(rows[0].keys())
-            else:
-                # Si no hay columnas, usar genéricas (no debería pasar)
-                columns = [f"col_{i}" for i in range(len(rows[0]))] if rows else []
-            logger.info(f"📋 Columnas fallback: {columns[:5]}...")
-        
-        # Obtener filas como lista de listas o tuplas
+        # Obtener filas
         if hasattr(result, 'rows') and callable(result.rows):
             rows = result.rows()
         else:
@@ -322,11 +333,12 @@ def buscar():
             client.close()
             return jsonify({"rows": [], "columnas": [], "total": 0})
         
-        # Crear diccionarios
-        rows_dict = [dict(zip(columns, row)) for row in rows]
+        # Crear diccionarios con las columnas reales
+        rows_dict = [dict(zip(columnas_reales, row)) for row in rows]
         
         # Filtrar columnas que no se quieren mostrar
-        columnas_finales = [c for c in columns if c not in ["día", "mes", "año_1", "hombre", "mujer"]]
+        columnas_excluir = ["día", "mes", "año_1", "hombre", "mujer"]
+        columnas_finales = [c for c in columnas_reales if c not in columnas_excluir]
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
         
         resultados = []
@@ -342,6 +354,10 @@ def buscar():
         logger.error(f"❌ Error en /buscar: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+# ==================================================
+# EXPORTAR A EXCEL
+# ==================================================
+
 @app.route('/exportar')
 @auth.login_required
 def exportar():
@@ -351,21 +367,24 @@ def exportar():
     
     try:
         client = get_turso_client()
+        columnas_reales = get_column_names(client)
+        
         mapa = {
             "nombre_nino": "nombre_de_la_niña_o_del_niño",
             "nombre_responsable": "nombre_de_la_madre_padre_o_responsable",
             "cui_nino": "código_único_de_identificación",
             "cui_responsable": "cui"
         }
-        columna = mapa[tipo]
+        columna_busqueda = mapa.get(tipo, "nombre_de_la_niña_o_del_niño")
+        
         condiciones = []
         parametros = []
         if query:
             if "cui" in tipo:
-                condiciones.append(f'"{columna}" = ?')
+                condiciones.append(f'"{columna_busqueda}" = ?')
                 parametros.append(query)
             else:
-                condiciones.append(f'"{columna}" LIKE ?')
+                condiciones.append(f'"{columna_busqueda}" LIKE ?')
                 parametros.append(f"%{query}%")
         if distrito:
             condiciones.append('UPPER("distrito") LIKE ?')
@@ -376,32 +395,20 @@ def exportar():
         logger.info(f"📝 SQL export: {sql}")
         
         result = client.execute(sql, parametros)
-        
-        # Obtener columnas y filas
-        if hasattr(result, 'columns') and callable(result.columns):
-            columns = result.columns()
-        elif hasattr(result, 'description') and result.description:
-            columns = [col[0] for col in result.description]
-        else:
-            rows = result.rows() if hasattr(result, 'rows') and callable(result.rows) else list(result)
-            if rows and isinstance(rows[0], dict):
-                columns = list(rows[0].keys())
-            else:
-                columns = [f"col_{i}" for i in range(len(rows[0]))] if rows else []
-        
         if hasattr(result, 'rows') and callable(result.rows):
             rows = result.rows()
         else:
             rows = list(result)
         
-        rows_dict = [dict(zip(columns, row)) for row in rows] if columns else []
+        rows_dict = [dict(zip(columnas_reales, row)) for row in rows] if columnas_reales else []
         
         wb = Workbook()
         ws = wb.active
         ws.title = "Resultados"
         
         if rows_dict:
-            columnas_finales = [c for c in columns if c not in ["día", "mes", "año_1", "hombre", "mujer"]]
+            columnas_excluir = ["día", "mes", "año_1", "hombre", "mujer"]
+            columnas_finales = [c for c in columnas_reales if c not in columnas_excluir]
             titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
             ws.append(titulos_columnas)
             for cell in ws[1]:
@@ -424,6 +431,10 @@ def exportar():
     except Exception as e:
         logger.error(f"❌ Error en /exportar: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
+
+# ==================================================
+# INICIO
+# ==================================================
 
 if __name__ == '__main__':
     logger.info("🚀 Servidor iniciado...")
