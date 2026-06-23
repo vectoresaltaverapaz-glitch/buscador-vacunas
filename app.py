@@ -159,7 +159,6 @@ COLUMNAS_EXCLUIDAS = [
     "rowid", "no.", "área", "pueblo", "comunidad",
     "departamento.1", "municipio.1", "comunidad.1",
     "comunidad.2", "calle,_avenida,_zona,_lote,",
-    # Las siguientes columnas se reemplazan por fechas calculadas
     "día", "mes", "año_1", "día.1", "mes.1", "año.1",
     "hombre", "mujer"
 ]
@@ -290,7 +289,6 @@ th{ background:#1e466e; color:white; position:sticky; top:0; }
             <option value="nombre_responsable">Nombre Responsable</option>
             <option value="cui_nino">CUI Niño</option>
             <option value="cui_responsable">CUI Responsable</option>
-            <option value="servicio">Servicio Salud</option>
         </select>
 
         <select id="genero">
@@ -538,9 +536,6 @@ def buscar():
             elif tipo == "cui_responsable":
                 condiciones.append('"cui_responsable" = ?')
                 parametros.append(query)
-            elif tipo == "servicio":
-                condiciones.append('"servicio" LIKE ?')
-                parametros.append(f"%{query}%")
         
         if distrito:
             condiciones.append('UPPER("distrito") LIKE ?')
@@ -602,27 +597,20 @@ def buscar():
             client.close()
             return jsonify({"rows": [], "columnas": [], "total": 0})
         
-        # Convertir filas a diccionarios
         rows_dict = [dict(zip(COLUMNAS_REALES, row)) for row in rows]
         
-        # Calcular género y fechas de nacimiento para cada fila
+        # Calcular género y fechas
         for row in rows_dict:
             row["genero"] = obtener_genero(row)
             row["fecha_nac_nino"] = formatear_fecha(row.get("día"), row.get("mes"), row.get("año_1"))
             row["fecha_nac_responsable"] = formatear_fecha(row.get("día.1"), row.get("mes.1"), row.get("año.1"))
         
-        # Definir columnas a mostrar (excluyendo las que no queremos y añadiendo las calculadas)
         columnas_finales = [c for c in COLUMNAS_REALES if c not in COLUMNAS_EXCLUIDAS]
-        # Insertar las fechas calculadas después de los nombres (o donde convenga)
-        # Lo haremos al inicio, después de "nombre_responsable" o al final, pero mejor agregarlas antes de las vacunas
-        # Encontramos el índice de 'nombre_responsable' para insertar después
         try:
             idx = columnas_finales.index('nombre_responsable')
             columnas_finales.insert(idx+1, 'fecha_nac_responsable')
         except ValueError:
             columnas_finales.append('fecha_nac_responsable')
-        
-        # Insertar fecha_nac_nino después de 'nombre_nino'
         try:
             idx = columnas_finales.index('nombre_nino')
             columnas_finales.insert(idx+1, 'fecha_nac_nino')
@@ -635,7 +623,10 @@ def buscar():
         for row in rows_dict:
             fila = []
             for c in columnas_finales:
-                fila.append(procesar_valor(c, row.get(c)) if c not in ['fecha_nac_nino', 'fecha_nac_responsable', 'genero'] else row.get(c, ''))
+                if c in ['fecha_nac_nino', 'fecha_nac_responsable', 'genero']:
+                    fila.append(row.get(c, ''))
+                else:
+                    fila.append(procesar_valor(c, row.get(c)))
             resultados.append(fila)
         
         client.close()
@@ -694,9 +685,6 @@ def exportar():
             elif tipo == "cui_responsable":
                 condiciones.append('"cui_responsable" = ?')
                 parametros.append(query)
-            elif tipo == "servicio":
-                condiciones.append('"servicio" LIKE ?')
-                parametros.append(f"%{query}%")
         
         if distrito:
             condiciones.append('UPPER("distrito") LIKE ?')
@@ -769,7 +757,6 @@ def exportar():
         ws = wb.active
         ws.title = "Resultados"
         
-        # Definir columnas a mostrar (igual que en buscar)
         columnas_finales = [c for c in COLUMNAS_REALES if c not in COLUMNAS_EXCLUIDAS]
         try:
             idx = columnas_finales.index('nombre_responsable')
@@ -792,7 +779,7 @@ def exportar():
         for row in rows_dict:
             fila = []
             for c in columnas_finales:
-                if c == 'fecha_nac_nino' or c == 'fecha_nac_responsable' or c == 'genero':
+                if c in ['fecha_nac_nino', 'fecha_nac_responsable', 'genero']:
                     fila.append(row.get(c, ''))
                 else:
                     fila.append(procesar_valor(c, row.get(c)))
