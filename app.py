@@ -75,7 +75,6 @@ RENOMBRES = {
     "genero": "Género",
     "fecha_nac_nino": "Fecha Nac. Niño",
     "fecha_nac_responsable": "Fecha Nac. Responsable",
-    # Vacunas con rangos de edad
     "hep._b": "Hepatitis B (<1 año)",
     "bcg": "BCG (<1 año)",
     "1a._(fipv)": "Polio 1 (<1 año)",
@@ -207,7 +206,6 @@ def obtener_genero(row):
         return "No especificado"
 
 def formatear_fecha(dia, mes, año):
-    """Formatea día, mes, año a DD/MM/YYYY si son válidos."""
     try:
         dia = int(dia) if dia else None
         mes = int(mes) if mes else None
@@ -318,7 +316,7 @@ th{ background:#1e466e; color:white; position:sticky; top:0; }
         <button id="btnCancelar" onclick="cancelarBusqueda()" style="display:none; background:#f39c12; color:white; border:none;">⏹ Cancelar</button>
         <button onclick="exportarExcel()">📊 Exportar Excel</button>
         <button onclick="limpiar()" style="background:#e74c3c; color:white; border:none;">🔄 Nueva búsqueda</button>
-        <span style="margin-left:15px;font-size:14px;color:#555;">Mostrando hasta 50 registros</span>
+        <span style="margin-left:15px;font-size:14px;color:#555;">Mostrando hasta 30 registros</span>
     </div>
 </div>
 
@@ -580,7 +578,7 @@ def buscar():
         sql = f"""
         SELECT * FROM datos_completos
         {f'WHERE {where}' if where else ''}
-        LIMIT 50
+        LIMIT 30
         """
         logger.info(f"📝 SQL: {sql}")
         logger.info(f"📦 Parámetros: {all_params}")
@@ -599,7 +597,6 @@ def buscar():
         
         rows_dict = [dict(zip(COLUMNAS_REALES, row)) for row in rows]
         
-        # Calcular género y fechas
         for row in rows_dict:
             row["genero"] = obtener_genero(row)
             row["fecha_nac_nino"] = formatear_fecha(row.get("día"), row.get("mes"), row.get("año_1"))
@@ -650,7 +647,7 @@ def buscar():
 # EXPORTAR CON LÍMITE SEGURO
 # ==================================================
 
-MAX_EXPORT_ROWS = 500
+MAX_EXPORT_ROWS = 300
 
 @app.route('/exportar')
 @auth.login_required
