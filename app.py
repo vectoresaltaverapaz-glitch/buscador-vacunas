@@ -73,6 +73,8 @@ RENOMBRES = {
     "telefono": "Teléfono",
     "falleció": "Falleció",
     "genero": "Género",
+    "fecha_nac_nino": "Fecha Nac. Niño",
+    "fecha_nac_responsable": "Fecha Nac. Responsable",
     # Vacunas con rangos de edad
     "hep._b": "Hepatitis B (<1 año)",
     "bcg": "BCG (<1 año)",
@@ -157,6 +159,7 @@ COLUMNAS_EXCLUIDAS = [
     "rowid", "no.", "área", "pueblo", "comunidad",
     "departamento.1", "municipio.1", "comunidad.1",
     "comunidad.2", "calle,_avenida,_zona,_lote,",
+    # Las siguientes columnas se reemplazan por fechas calculadas
     "día", "mes", "año_1", "día.1", "mes.1", "año.1",
     "hombre", "mujer"
 ]
@@ -203,6 +206,18 @@ def obtener_genero(row):
         return "Mujer"
     else:
         return "No especificado"
+
+def formatear_fecha(dia, mes, año):
+    """Formatea día, mes, año a DD/MM/YYYY si son válidos."""
+    try:
+        dia = int(dia) if dia else None
+        mes = int(mes) if mes else None
+        año = int(año) if año else None
+        if dia and mes and año and 1 <= dia <= 31 and 1 <= mes <= 12 and 1900 <= año <= 2100:
+            return f"{dia:02d}/{mes:02d}/{año}"
+        return ""
+    except:
+        return ""
 
 # ==================================================
 # HTML
@@ -317,18 +332,15 @@ th{ background:#1e466e; color:white; position:sticky; top:0; }
 var abortController = null;
 
 function iniciarBusqueda(){
-    // Si ya hay una búsqueda en curso, cancelarla primero
     if (abortController) {
         abortController.abort();
     }
 
-    // Mostrar spinner y deshabilitar botones
     document.getElementById('spinner').style.display = 'block';
     document.getElementById('btnBuscar').disabled = true;
     document.getElementById('btnCancelar').style.display = 'inline-block';
     document.getElementById('resultado').innerHTML = '';
 
-    // Crear nuevo AbortController
     abortController = new AbortController();
 
     let q = document.getElementById('search').value;
@@ -378,7 +390,6 @@ function iniciarBusqueda(){
     })
     .catch(err => {
         if (err.name === 'AbortError') {
-            // Cancelación intencional, no mostrar error
             document.getElementById('resultado').innerHTML = '<p>⏹ Búsqueda cancelada.</p>';
         } else {
             finalizarBusqueda();
@@ -394,7 +405,6 @@ function iniciarBusqueda(){
 function cancelarBusqueda(){
     if (abortController) {
         abortController.abort();
-        // El .finally se encargará de limpiar la UI
     }
 }
 
@@ -405,7 +415,6 @@ function finalizarBusqueda(){
 }
 
 function limpiar(){
-    // Cancelar búsqueda en curso si existe
     if (abortController) {
         abortController.abort();
         abortController = null;
@@ -422,12 +431,10 @@ function limpiar(){
     document.getElementById('ano_madre').value = '';
     document.getElementById('resultado').innerHTML = '';
     finalizarBusqueda();
-    // Opcional: auto-buscar después de limpiar
     iniciarBusqueda();
 }
 
 function exportarExcel(){
-    // Si hay búsqueda en curso, no la cancelamos, solo exportamos con los filtros actuales
     let q = document.getElementById('search').value;
     let tipo = document.getElementById('tipo').value;
     let distrito = document.getElementById('distrito').value;
@@ -595,18 +602,40 @@ def buscar():
             client.close()
             return jsonify({"rows": [], "columnas": [], "total": 0})
         
+        # Convertir filas a diccionarios
         rows_dict = [dict(zip(COLUMNAS_REALES, row)) for row in rows]
         
+        # Calcular género y fechas de nacimiento para cada fila
         for row in rows_dict:
             row["genero"] = obtener_genero(row)
+            row["fecha_nac_nino"] = formatear_fecha(row.get("día"), row.get("mes"), row.get("año_1"))
+            row["fecha_nac_responsable"] = formatear_fecha(row.get("día.1"), row.get("mes.1"), row.get("año.1"))
         
+        # Definir columnas a mostrar (excluyendo las que no queremos y añadiendo las calculadas)
         columnas_finales = [c for c in COLUMNAS_REALES if c not in COLUMNAS_EXCLUIDAS]
-        columnas_finales.append("genero")
+        # Insertar las fechas calculadas después de los nombres (o donde convenga)
+        # Lo haremos al inicio, después de "nombre_responsable" o al final, pero mejor agregarlas antes de las vacunas
+        # Encontramos el índice de 'nombre_responsable' para insertar después
+        try:
+            idx = columnas_finales.index('nombre_responsable')
+            columnas_finales.insert(idx+1, 'fecha_nac_responsable')
+        except ValueError:
+            columnas_finales.append('fecha_nac_responsable')
+        
+        # Insertar fecha_nac_nino después de 'nombre_nino'
+        try:
+            idx = columnas_finales.index('nombre_nino')
+            columnas_finales.insert(idx+1, 'fecha_nac_nino')
+        except ValueError:
+            columnas_finales.append('fecha_nac_nino')
+        
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
         
         resultados = []
         for row in rows_dict:
-            fila = [procesar_valor(c, row.get(c)) for c in columnas_finales]
+            fila = []
+            for c in columnas_finales:
+                fila.append(procesar_valor(c, row.get(c)) if c not in ['fecha_nac_nino', 'fecha_nac_responsable', 'genero'] else row.get(c, ''))
             resultados.append(fila)
         
         client.close()
@@ -731,18 +760,29 @@ def exportar():
             )
         
         rows_dict = [dict(zip(COLUMNAS_REALES, row)) for row in rows]
-        
         for row in rows_dict:
             row["genero"] = obtener_genero(row)
+            row["fecha_nac_nino"] = formatear_fecha(row.get("día"), row.get("mes"), row.get("año_1"))
+            row["fecha_nac_responsable"] = formatear_fecha(row.get("día.1"), row.get("mes.1"), row.get("año.1"))
         
         wb = Workbook()
         ws = wb.active
         ws.title = "Resultados"
         
+        # Definir columnas a mostrar (igual que en buscar)
         columnas_finales = [c for c in COLUMNAS_REALES if c not in COLUMNAS_EXCLUIDAS]
-        columnas_finales.append("genero")
-        titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
+        try:
+            idx = columnas_finales.index('nombre_responsable')
+            columnas_finales.insert(idx+1, 'fecha_nac_responsable')
+        except ValueError:
+            columnas_finales.append('fecha_nac_responsable')
+        try:
+            idx = columnas_finales.index('nombre_nino')
+            columnas_finales.insert(idx+1, 'fecha_nac_nino')
+        except ValueError:
+            columnas_finales.append('fecha_nac_nino')
         
+        titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
         ws.append(titulos_columnas)
         for cell in ws[1]:
             cell.font = Font(bold=True, color="FFFFFF")
@@ -750,7 +790,12 @@ def exportar():
             cell.alignment = Alignment(horizontal="center")
         
         for row in rows_dict:
-            fila = [procesar_valor(c, row.get(c)) for c in columnas_finales]
+            fila = []
+            for c in columnas_finales:
+                if c == 'fecha_nac_nino' or c == 'fecha_nac_responsable' or c == 'genero':
+                    fila.append(row.get(c, ''))
+                else:
+                    fila.append(procesar_valor(c, row.get(c)))
             ws.append(fila)
         
         output = BytesIO()
