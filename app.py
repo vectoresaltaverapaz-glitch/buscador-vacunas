@@ -75,6 +75,7 @@ RENOMBRES = {
     "genero": "Género",
     "fecha_nac_nino": "Fecha Nac. Niño",
     "fecha_nac_responsable": "Fecha Nac. Responsable",
+    # Vacunas con rangos de edad
     "hep._b": "Hepatitis B (<1 año)",
     "bcg": "BCG (<1 año)",
     "1a._(fipv)": "Polio 1 (<1 año)",
@@ -206,6 +207,7 @@ def obtener_genero(row):
         return "No especificado"
 
 def formatear_fecha(dia, mes, año):
+    """Formatea día, mes, año a DD/MM/YYYY si son válidos."""
     try:
         dia = int(dia) if dia else None
         mes = int(mes) if mes else None
@@ -225,7 +227,7 @@ HTML = """
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Buscador SIGSA</title>
+<title>Buscador de Vacunas</title>
 <style>
 body{ font-family:Arial; background:#eef2f7; padding:20px; }
 .container{ background:white; padding:20px; border-radius:10px; }
@@ -255,7 +257,7 @@ th{ background:#1e466e; color:white; position:sticky; top:0; }
 </head>
 <body>
 <div class="container">
-<h2>🔍 Buscador SIGSA</h2>
+<h2>🔍 Buscador de Vacunas</h2>
 
 <div class="filtros">
     <div>
@@ -597,6 +599,7 @@ def buscar():
         
         rows_dict = [dict(zip(COLUMNAS_REALES, row)) for row in rows]
         
+        # Calcular género y fechas
         for row in rows_dict:
             row["genero"] = obtener_genero(row)
             row["fecha_nac_nino"] = formatear_fecha(row.get("día"), row.get("mes"), row.get("año_1"))
@@ -644,10 +647,10 @@ def buscar():
         })
 
 # ==================================================
-# EXPORTAR CON LÍMITE SEGURO
+# EXPORTAR CON LÍMITE SEGURO (30 registros)
 # ==================================================
 
-MAX_EXPORT_ROWS = 300
+MAX_EXPORT_ROWS = 30
 
 @app.route('/exportar')
 @auth.login_required
