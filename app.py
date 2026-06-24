@@ -207,7 +207,6 @@ def obtener_genero(row):
         return "No especificado"
 
 def formatear_fecha(dia, mes, año):
-    """Formatea día, mes, año a DD/MM/YYYY si son válidos."""
     try:
         dia = int(dia) if dia else None
         mes = int(mes) if mes else None
@@ -596,11 +595,38 @@ def buscar():
         logger.info(f"📦 Parámetros: {all_params}")
         logger.info(f"📌 Límite aplicado: {limite}")
         
-        result = client.execute(sql, all_params)
-        if hasattr(result, 'rows') and callable(result.rows):
-            rows = result.rows()
-        else:
-            rows = list(result)
+        # --- 4. Ejecutar consulta con manejo de errores ---
+        try:
+            result = client.execute(sql, all_params)
+            # Intentar obtener filas y columnas de forma segura
+            if hasattr(result, 'rows') and callable(result.rows):
+                rows = result.rows()
+                # Intentar obtener columnas desde el ResultSet
+                if hasattr(result, 'columns') and callable(result.columns):
+                    columns = result.columns()
+                else:
+                    # Si no hay columns(), intentar obtener de la primera fila si es dict
+                    if rows and isinstance(rows[0], dict):
+                        columns = list(rows[0].keys())
+                    else:
+                        # Si no hay columnas, usar las reales
+                        columns = COLUMNAS_REALES
+            else:
+                # Si result es una lista directamente
+                rows = list(result)
+                if rows and isinstance(rows[0], dict):
+                    columns = list(rows[0].keys())
+                else:
+                    columns = COLUMNAS_REALES
+        except Exception as e:
+            logger.error(f"❌ Error en ejecución de consulta: {str(e)}")
+            client.close()
+            return jsonify({
+                "rows": [],
+                "columnas": [],
+                "total": 0,
+                "error": f"Error en la consulta: {str(e)}"
+            })
         
         logger.info(f"📊 Filas obtenidas: {len(rows)}")
         
@@ -608,7 +634,8 @@ def buscar():
             client.close()
             return jsonify({"rows": [], "columnas": [], "total": 0})
         
-        rows_dict = [dict(zip(COLUMNAS_REALES, row)) for row in rows]
+        # Convertir a lista de diccionarios usando las columnas obtenidas
+        rows_dict = [dict(zip(columns, row)) for row in rows]
         
         # Calcular género y fechas
         for row in rows_dict:
@@ -616,17 +643,14 @@ def buscar():
             row["fecha_nac_nino"] = formatear_fecha(row.get("día"), row.get("mes"), row.get("año_1"))
             row["fecha_nac_responsable"] = formatear_fecha(row.get("día.1"), row.get("mes.1"), row.get("año.1"))
         
-        columnas_finales = [c for c in COLUMNAS_REALES if c not in COLUMNAS_EXCLUIDAS]
-        try:
-            idx = columnas_finales.index('nombre_responsable')
-            columnas_finales.insert(idx+1, 'fecha_nac_responsable')
-        except ValueError:
-            columnas_finales.append('fecha_nac_responsable')
-        try:
-            idx = columnas_finales.index('nombre_nino')
-            columnas_finales.insert(idx+1, 'fecha_nac_nino')
-        except ValueError:
-            columnas_finales.append('fecha_nac_nino')
+        columnas_finales = [c for c in columns if c not in COLUMNAS_EXCLUIDAS]
+        # Agregar columnas calculadas si no existen
+        if "genero" not in columnas_finales:
+            columnas_finales.append("genero")
+        if "fecha_nac_nino" not in columnas_finales:
+            columnas_finales.append("fecha_nac_nino")
+        if "fecha_nac_responsable" not in columnas_finales:
+            columnas_finales.append("fecha_nac_responsable")
         
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
         
@@ -737,11 +761,24 @@ def exportar():
         """
         logger.info(f"📝 SQL export: {sql}")
         
-        result = client.execute(sql, parametros)
-        if hasattr(result, 'rows') and callable(result.rows):
-            rows = result.rows()
-        else:
-            rows = list(result)
+        try:
+            result = client.execute(sql, parametros)
+            if hasattr(result, 'rows') and callable(result.rows):
+                rows = result.rows()
+                if hasattr(result, 'columns') and callable(result.columns):
+                    columns = result.columns()
+                else:
+                    columns = COLUMNAS_REALES
+            else:
+                rows = list(result)
+                if rows and isinstance(rows[0], dict):
+                    columns = list(rows[0].keys())
+                else:
+                    columns = COLUMNAS_REALES
+        except Exception as e:
+            logger.error(f"❌ Error en exportación: {str(e)}")
+            client.close()
+            return jsonify({"error": f"Error en la exportación: {str(e)}"}), 500
         
         if not rows:
             client.close()
@@ -758,7 +795,7 @@ def exportar():
                 headers={'Content-Disposition': 'attachment; filename=resultados.xlsx'}
             )
         
-        rows_dict = [dict(zip(COLUMNAS_REALES, row)) for row in rows]
+        rows_dict = [dict(zip(columns, row)) for row in rows]
         for row in rows_dict:
             row["genero"] = obtener_genero(row)
             row["fecha_nac_nino"] = formatear_fecha(row.get("día"), row.get("mes"), row.get("año_1"))
@@ -768,17 +805,13 @@ def exportar():
         ws = wb.active
         ws.title = "Resultados"
         
-        columnas_finales = [c for c in COLUMNAS_REALES if c not in COLUMNAS_EXCLUIDAS]
-        try:
-            idx = columnas_finales.index('nombre_responsable')
-            columnas_finales.insert(idx+1, 'fecha_nac_responsable')
-        except ValueError:
-            columnas_finales.append('fecha_nac_responsable')
-        try:
-            idx = columnas_finales.index('nombre_nino')
-            columnas_finales.insert(idx+1, 'fecha_nac_nino')
-        except ValueError:
-            columnas_finales.append('fecha_nac_nino')
+        columnas_finales = [c for c in columns if c not in COLUMNAS_EXCLUIDAS]
+        if "genero" not in columnas_finales:
+            columnas_finales.append("genero")
+        if "fecha_nac_nino" not in columnas_finales:
+            columnas_finales.append("fecha_nac_nino")
+        if "fecha_nac_responsable" not in columnas_finales:
+            columnas_finales.append("fecha_nac_responsable")
         
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
         ws.append(titulos_columnas)
