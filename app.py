@@ -75,7 +75,7 @@ RENOMBRES = {
     "genero": "Género",
     "fecha_nac_nino": "Fecha Nac. Niño",
     "fecha_nac_responsable": "Fecha Nac. Responsable",
-    # Vacunas con rangos de edad
+    # Vacunas
     "hep._b": "Hepatitis B (<1 año)",
     "bcg": "BCG (<1 año)",
     "1a._(fipv)": "Polio 1 (<1 año)",
@@ -469,7 +469,7 @@ def index():
     return render_template_string(HTML)
 
 # ==================================================
-# BUSCAR CON FTS (Full-Text Search)
+# BUSCAR CON FTS (Full-Text Search) y límite dinámico
 # ==================================================
 
 @app.route('/buscar')
@@ -505,7 +505,10 @@ def buscar():
                     LIMIT 100
                 """
                 fts_result = client.execute(fts_sql, [fts_query])
-                fts_rows = fts_result.rows() if hasattr(fts_result, 'rows') and callable(fts_result.rows) else list(fts_result)
+                if hasattr(fts_result, 'rows') and callable(fts_result.rows):
+                    fts_rows = fts_result.rows()
+                else:
+                    fts_rows = list(fts_result)
                 
                 if fts_rows:
                     rowids = [str(row[0]) for row in fts_rows]
@@ -577,13 +580,21 @@ def buscar():
         where = " AND ".join(where_parts) if where_parts else ""
         all_params = fts_params + parametros
         
+        # --- 3. Límite dinámico según cantidad de filtros ---
+        num_filtros = len(condiciones)
+        if num_filtros > 2:
+            limite = 15
+        else:
+            limite = 30
+        
         sql = f"""
         SELECT * FROM datos_completos
         {f'WHERE {where}' if where else ''}
-        LIMIT 30
+        LIMIT {limite}
         """
         logger.info(f"📝 SQL: {sql}")
         logger.info(f"📦 Parámetros: {all_params}")
+        logger.info(f"📌 Límite aplicado: {limite}")
         
         result = client.execute(sql, all_params)
         if hasattr(result, 'rows') and callable(result.rows):
@@ -647,7 +658,7 @@ def buscar():
         })
 
 # ==================================================
-# EXPORTAR CON LÍMITE SEGURO (30 registros)
+# EXPORTAR CON LÍMITE DE 30 REGISTROS
 # ==================================================
 
 MAX_EXPORT_ROWS = 30
