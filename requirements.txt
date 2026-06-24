@@ -1,5 +1,5 @@
 flask
 flask_httpauth
 openpyxl
-libsql-client
+turso-python
 gunicorn
