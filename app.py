@@ -33,7 +33,7 @@ def get_turso_client():
     return libsql_client.create_client_sync(url=url, auth_token=token)
 
 # ==================================================
-# COLUMNAS REALES
+# COLUMNAS REALES (lista fija)
 # ==================================================
 
 COLUMNAS_REALES = [
@@ -199,8 +199,7 @@ def formatear_fecha(dia, mes, año):
     except:
         return ""
 
-HTML = """
-<!DOCTYPE html>
+HTML = """<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -215,7 +214,6 @@ input,select,button{ padding:10px; margin:5px; }
 table{ width:100%; border-collapse:collapse; margin-top:20px; font-size:12px; }
 th,td{ border:1px solid #ccc; padding:5px; }
 th{ background:#1e466e; color:white; position:sticky; top:0; }
-
 .spinner {
     display: none;
     border: 6px solid #f3f3f3;
@@ -235,7 +233,6 @@ th{ background:#1e466e; color:white; position:sticky; top:0; }
 <body>
 <div class="container">
 <h2>🔍 Buscador de Vacunas</h2>
-
 <div class="filtros">
     <div>
         <select id="distrito">
@@ -260,36 +257,30 @@ th{ background:#1e466e; color:white; position:sticky; top:0; }
             <option value="LA TINTA">LA TINTA</option>
             <option value="TELEMÁN">TELEMÁN</option>
         </select>
-
         <select id="tipo">
             <option value="nombre_nino">Nombre Niño</option>
             <option value="nombre_responsable">Nombre Responsable</option>
             <option value="cui_nino">CUI Niño</option>
             <option value="cui_responsable">CUI Responsable</option>
         </select>
-
         <select id="genero">
             <option value="">Género (todos)</option>
             <option value="Hombre">Hombre</option>
             <option value="Mujer">Mujer</option>
             <option value="No especificado">No especificado</option>
         </select>
-
         <input type="text" id="search" placeholder="Buscar..." style="width:200px;">
     </div>
-
     <div style="margin-top:10px;">
         <label>Fecha Nacimiento Niño:</label>
         <input type="number" id="dia_nac" placeholder="Día" style="width:60px;">
         <input type="number" id="mes_nac" placeholder="Mes" style="width:60px;">
         <input type="number" id="ano_nac" placeholder="Año" style="width:80px;">
-
         <label style="margin-left:15px;">Fecha Nacimiento Responsable:</label>
         <input type="number" id="dia_madre" placeholder="Día" style="width:60px;">
         <input type="number" id="mes_madre" placeholder="Mes" style="width:60px;">
         <input type="number" id="ano_madre" placeholder="Año" style="width:80px;">
     </div>
-
     <div class="botones" style="margin-top:10px;">
         <button id="btnBuscar" onclick="iniciarBusqueda()">🔍 Buscar</button>
         <button id="btnCancelar" onclick="cancelarBusqueda()" style="display:none; background:#f39c12; color:white; border:none;">⏹ Cancelar</button>
@@ -298,26 +289,18 @@ th{ background:#1e466e; color:white; position:sticky; top:0; }
         <span style="margin-left:15px;font-size:14px;color:#555;">Mostrando hasta 30 registros</span>
     </div>
 </div>
-
 <div id="resultado"></div>
 <div class="spinner" id="spinner"></div>
 </div>
-
 <script>
 var abortController = null;
-
 function iniciarBusqueda(){
-    if (abortController) {
-        abortController.abort();
-    }
-
+    if (abortController) { abortController.abort(); }
     document.getElementById('spinner').style.display = 'block';
     document.getElementById('btnBuscar').disabled = true;
     document.getElementById('btnCancelar').style.display = 'inline-block';
     document.getElementById('resultado').innerHTML = '';
-
     abortController = new AbortController();
-
     let q = document.getElementById('search').value;
     let tipo = document.getElementById('tipo').value;
     let distrito = document.getElementById('distrito').value;
@@ -328,7 +311,6 @@ function iniciarBusqueda(){
     let dia_madre = document.getElementById('dia_madre').value;
     let mes_madre = document.getElementById('mes_madre').value;
     let ano_madre = document.getElementById('ano_madre').value;
-
     let url = `/buscar?q=${encodeURIComponent(q)}&tipo=${tipo}&distrito=${encodeURIComponent(distrito)}&genero=${encodeURIComponent(genero)}`;
     if (dia_nac) url += `&dia_nac=${dia_nac}`;
     if (mes_nac) url += `&mes_nac=${mes_nac}`;
@@ -336,7 +318,6 @@ function iniciarBusqueda(){
     if (dia_madre) url += `&dia_madre=${dia_madre}`;
     if (mes_madre) url += `&mes_madre=${mes_madre}`;
     if (ano_madre) url += `&ano_madre=${ano_madre}`;
-
     fetch(url, { signal: abortController.signal })
     .then(r => r.json())
     .then(data => {
@@ -376,24 +357,16 @@ function iniciarBusqueda(){
         abortController = null;
     });
 }
-
 function cancelarBusqueda(){
-    if (abortController) {
-        abortController.abort();
-    }
+    if (abortController) { abortController.abort(); }
 }
-
 function finalizarBusqueda(){
     document.getElementById('spinner').style.display = 'none';
     document.getElementById('btnBuscar').disabled = false;
     document.getElementById('btnCancelar').style.display = 'none';
 }
-
 function limpiar(){
-    if (abortController) {
-        abortController.abort();
-        abortController = null;
-    }
+    if (abortController) { abortController.abort(); abortController = null; }
     document.getElementById('search').value = '';
     document.getElementById('tipo').value = 'nombre_nino';
     document.getElementById('distrito').value = '';
@@ -408,7 +381,6 @@ function limpiar(){
     finalizarBusqueda();
     iniciarBusqueda();
 }
-
 function exportarExcel(){
     let q = document.getElementById('search').value;
     let tipo = document.getElementById('tipo').value;
@@ -420,7 +392,6 @@ function exportarExcel(){
     let dia_madre = document.getElementById('dia_madre').value;
     let mes_madre = document.getElementById('mes_madre').value;
     let ano_madre = document.getElementById('ano_madre').value;
-
     let url = `/exportar?q=${encodeURIComponent(q)}&tipo=${tipo}&distrito=${encodeURIComponent(distrito)}&genero=${encodeURIComponent(genero)}`;
     if (dia_nac) url += `&dia_nac=${dia_nac}`;
     if (mes_nac) url += `&mes_nac=${mes_nac}`;
@@ -428,7 +399,6 @@ function exportarExcel(){
     if (dia_madre) url += `&dia_madre=${dia_madre}`;
     if (mes_madre) url += `&mes_madre=${mes_madre}`;
     if (ano_madre) url += `&ano_madre=${ano_madre}`;
-
     window.location.href = url;
 }
 </script>
@@ -464,10 +434,9 @@ def buscar():
     try:
         client = get_turso_client()
         
-        # --- FTS ---
+        # FTS
         fts_condition = ""
         fts_params = []
-        
         if query:
             if tipo == "nombre_nino":
                 fts_query = f"{query}*"
@@ -482,7 +451,6 @@ def buscar():
                     fts_rows = fts_result.rows()
                 else:
                     fts_rows = list(fts_result)
-                
                 if fts_rows:
                     rowids = [str(row[0]) for row in fts_rows]
                     fts_condition = f'"rowid" IN ({",".join(rowids)})'
@@ -490,15 +458,12 @@ def buscar():
                 else:
                     client.close()
                     return jsonify({"rows": [], "columnas": [], "total": 0})
-            
             elif tipo == "nombre_responsable":
                 fts_condition = f'"nombre_responsable" LIKE ?'
                 fts_params.append(f"%{query}%")
         
-        # --- Condiciones adicionales ---
         condiciones = []
         parametros = []
-        
         if query and not fts_condition:
             if tipo == "nombre_nino":
                 condiciones.append('"nombre_nino" LIKE ?')
@@ -512,11 +477,9 @@ def buscar():
             elif tipo == "cui_responsable":
                 condiciones.append('"cui_responsable" = ?')
                 parametros.append(query)
-        
         if distrito:
             condiciones.append('UPPER("distrito") LIKE ?')
             parametros.append(f"%{distrito.upper()}%")
-        
         if genero:
             if genero == "Hombre":
                 condiciones.append('"hombre" = "X"')
@@ -524,7 +487,6 @@ def buscar():
                 condiciones.append('"mujer" = "X"')
             elif genero == "No especificado":
                 condiciones.append('"hombre" != "X" AND "mujer" != "X"')
-        
         if dia_nac:
             condiciones.append('"día" = ?')
             parametros.append(dia_nac)
@@ -534,7 +496,6 @@ def buscar():
         if ano_nac:
             condiciones.append('"año_1" = ?')
             parametros.append(ano_nac)
-        
         if dia_madre:
             condiciones.append('"día.1" = ?')
             parametros.append(dia_madre)
@@ -549,7 +510,6 @@ def buscar():
         if fts_condition:
             where_parts.append(fts_condition)
         where_parts.extend(condiciones)
-        
         where = " AND ".join(where_parts) if where_parts else ""
         all_params = fts_params + parametros
         
@@ -565,15 +525,14 @@ def buscar():
         logger.info(f"📦 Parámetros: {all_params}")
         logger.info(f"📌 Límite aplicado: {limite}")
         
-        # --- Ejecutar ---
         try:
             result = client.execute(sql, all_params)
         except Exception as e:
-            logger.error(f"❌ Error en consulta: {str(e)}")
+            logger.error(f"❌ Error en ejecución: {str(e)}")
             client.close()
             return jsonify({"rows": [], "columnas": [], "total": 0, "error": str(e)})
         
-        # --- Procesar resultado ---
+        # Procesar resultado
         try:
             if hasattr(result, 'rows') and callable(result.rows):
                 rows = result.rows()
@@ -585,7 +544,7 @@ def buscar():
                 rows = list(result)
                 columns = COLUMNAS_REALES
         except Exception as e:
-            logger.error(f"❌ Error al procesar resultado: {str(e)}")
+            logger.error(f"❌ Error al procesar: {str(e)}")
             client.close()
             return jsonify({"rows": [], "columnas": [], "total": 0, "error": str(e)})
         
@@ -595,7 +554,6 @@ def buscar():
             return jsonify({"rows": [], "columnas": [], "total": 0})
         
         rows_dict = [dict(zip(columns, row)) for row in rows]
-        
         for row in rows_dict:
             row["genero"] = obtener_genero(row)
             row["fecha_nac_nino"] = formatear_fecha(row.get("día"), row.get("mes"), row.get("año_1"))
@@ -605,7 +563,6 @@ def buscar():
         for extra in ["genero", "fecha_nac_nino", "fecha_nac_responsable"]:
             if extra not in columnas_finales:
                 columnas_finales.append(extra)
-        
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
         resultados = []
         for row in rows_dict:
@@ -659,7 +616,6 @@ def exportar():
         
         condiciones = []
         parametros = []
-        
         if query:
             if tipo == "nombre_nino":
                 condiciones.append('"nombre_nino" LIKE ?')
@@ -673,11 +629,9 @@ def exportar():
             elif tipo == "cui_responsable":
                 condiciones.append('"cui_responsable" = ?')
                 parametros.append(query)
-        
         if distrito:
             condiciones.append('UPPER("distrito") LIKE ?')
             parametros.append(f"%{distrito.upper()}%")
-        
         if genero:
             if genero == "Hombre":
                 condiciones.append('"hombre" = "X"')
@@ -685,7 +639,6 @@ def exportar():
                 condiciones.append('"mujer" = "X"')
             elif genero == "No especificado":
                 condiciones.append('"hombre" != "X" AND "mujer" != "X"')
-        
         if dia_nac:
             condiciones.append('"día" = ?')
             parametros.append(dia_nac)
@@ -695,7 +648,6 @@ def exportar():
         if ano_nac:
             condiciones.append('"año_1" = ?')
             parametros.append(ano_nac)
-        
         if dia_madre:
             condiciones.append('"día.1" = ?')
             parametros.append(dia_madre)
