@@ -4,7 +4,7 @@ from flask import Flask, render_template_string, request, jsonify, Response
 from flask_httpauth import HTTPBasicAuth
 from datetime import datetime, timedelta
 from io import BytesIO
-from turso_python.connection import TursoConnection
+import libsql_client
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
@@ -30,7 +30,7 @@ def get_turso_client():
         logger.error("❌ Faltan variables de entorno TURSO_URL o TURSO_TOKEN")
         raise Exception("Faltan variables de entorno")
     logger.info(f"✅ Conectando a Turso: {url}")
-    return TursoConnection(database_url=url, auth_token=token)
+    return libsql_client.create_client_sync(url=url, auth_token=token)
 
 # ==================================================
 # COLUMNAS REALES
@@ -463,9 +463,8 @@ def buscar():
     
     try:
         client = get_turso_client()
-        cursor = client.cursor()
         
-        # FTS para búsqueda de texto
+        # --- FTS ---
         fts_condition = ""
         fts_params = []
         
@@ -478,8 +477,12 @@ def buscar():
                     ORDER BY rank
                     LIMIT 100
                 """
-                cursor.execute(fts_sql, [fts_query])
-                fts_rows = cursor.fetchall()
+                fts_result = client.execute(fts_sql, [fts_query])
+                if hasattr(fts_result, 'rows') and callable(fts_result.rows):
+                    fts_rows = fts_result.rows()
+                else:
+                    fts_rows = list(fts_result)
+                
                 if fts_rows:
                     rowids = [str(row[0]) for row in fts_rows]
                     fts_condition = f'"rowid" IN ({",".join(rowids)})'
@@ -492,7 +495,7 @@ def buscar():
                 fts_condition = f'"nombre_responsable" LIKE ?'
                 fts_params.append(f"%{query}%")
         
-        # Condiciones adicionales
+        # --- Condiciones adicionales ---
         condiciones = []
         parametros = []
         
@@ -551,10 +554,7 @@ def buscar():
         all_params = fts_params + parametros
         
         num_filtros = len(condiciones)
-        if num_filtros > 2:
-            limite = 15
-        else:
-            limite = 30
+        limite = 15 if num_filtros > 2 else 30
         
         sql = f"""
         SELECT * FROM datos_completos
@@ -565,24 +565,43 @@ def buscar():
         logger.info(f"📦 Parámetros: {all_params}")
         logger.info(f"📌 Límite aplicado: {limite}")
         
-        cursor.execute(sql, all_params)
-        rows = cursor.fetchall()
-        col_names = [desc[0] for desc in cursor.description]
-        logger.info(f"📋 Columnas: {col_names}")
-        logger.info(f"📊 Filas obtenidas: {len(rows)}")
+        # --- Ejecutar ---
+        try:
+            result = client.execute(sql, all_params)
+        except Exception as e:
+            logger.error(f"❌ Error en consulta: {str(e)}")
+            client.close()
+            return jsonify({"rows": [], "columnas": [], "total": 0, "error": str(e)})
         
+        # --- Procesar resultado ---
+        try:
+            if hasattr(result, 'rows') and callable(result.rows):
+                rows = result.rows()
+                if hasattr(result, 'columns') and callable(result.columns):
+                    columns = result.columns()
+                else:
+                    columns = COLUMNAS_REALES
+            else:
+                rows = list(result)
+                columns = COLUMNAS_REALES
+        except Exception as e:
+            logger.error(f"❌ Error al procesar resultado: {str(e)}")
+            client.close()
+            return jsonify({"rows": [], "columnas": [], "total": 0, "error": str(e)})
+        
+        logger.info(f"📊 Filas obtenidas: {len(rows)}")
         if not rows:
             client.close()
             return jsonify({"rows": [], "columnas": [], "total": 0})
         
-        rows_dict = [dict(zip(col_names, row)) for row in rows]
+        rows_dict = [dict(zip(columns, row)) for row in rows]
         
         for row in rows_dict:
             row["genero"] = obtener_genero(row)
             row["fecha_nac_nino"] = formatear_fecha(row.get("día"), row.get("mes"), row.get("año_1"))
             row["fecha_nac_responsable"] = formatear_fecha(row.get("día.1"), row.get("mes.1"), row.get("año.1"))
         
-        columnas_finales = [c for c in col_names if c not in COLUMNAS_EXCLUIDAS]
+        columnas_finales = [c for c in columns if c not in COLUMNAS_EXCLUIDAS]
         for extra in ["genero", "fecha_nac_nino", "fecha_nac_responsable"]:
             if extra not in columnas_finales:
                 columnas_finales.append(extra)
@@ -637,7 +656,6 @@ def exportar():
     
     try:
         client = get_turso_client()
-        cursor = client.cursor()
         
         condiciones = []
         parametros = []
@@ -696,9 +714,22 @@ def exportar():
         """
         logger.info(f"📝 SQL export: {sql}")
         
-        cursor.execute(sql, parametros)
-        rows = cursor.fetchall()
-        col_names = [desc[0] for desc in cursor.description]
+        try:
+            result = client.execute(sql, parametros)
+        except Exception as e:
+            logger.error(f"❌ Error en exportación: {str(e)}")
+            client.close()
+            return jsonify({"error": f"Error en la exportación: {str(e)}"}), 500
+        
+        if hasattr(result, 'rows') and callable(result.rows):
+            rows = result.rows()
+            if hasattr(result, 'columns') and callable(result.columns):
+                columns = result.columns()
+            else:
+                columns = COLUMNAS_REALES
+        else:
+            rows = list(result)
+            columns = COLUMNAS_REALES
         
         if not rows:
             client.close()
@@ -715,7 +746,7 @@ def exportar():
                 headers={'Content-Disposition': 'attachment; filename=resultados.xlsx'}
             )
         
-        rows_dict = [dict(zip(col_names, row)) for row in rows]
+        rows_dict = [dict(zip(columns, row)) for row in rows]
         for row in rows_dict:
             row["genero"] = obtener_genero(row)
             row["fecha_nac_nino"] = formatear_fecha(row.get("día"), row.get("mes"), row.get("año_1"))
@@ -725,7 +756,7 @@ def exportar():
         ws = wb.active
         ws.title = "Resultados"
         
-        columnas_finales = [c for c in col_names if c not in COLUMNAS_EXCLUIDAS]
+        columnas_finales = [c for c in columns if c not in COLUMNAS_EXCLUIDAS]
         for extra in ["genero", "fecha_nac_nino", "fecha_nac_responsable"]:
             if extra not in columnas_finales:
                 columnas_finales.append(extra)
