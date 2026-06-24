@@ -8,7 +8,6 @@ import libsql_client
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
-# Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ def get_turso_client():
     return libsql_client.create_client_sync(url=url, auth_token=token)
 
 # ==================================================
-# COLUMNAS REALES (lista fija - todas las columnas de la BD)
+# COLUMNAS REALES
 # ==================================================
 
 COLUMNAS_REALES = [
@@ -56,10 +55,6 @@ COLUMNAS_REALES = [
     "r1", "r2", "spr_1.1", "spr_2.1", "1a..7", "2a..7", "3a..2"
 ]
 
-# ==================================================
-# RENOMBRES (títulos bonitos para mostrar en pantalla)
-# ==================================================
-
 RENOMBRES = {
     "año": "Año",
     "distrito": "Distrito",
@@ -75,7 +70,6 @@ RENOMBRES = {
     "genero": "Género",
     "fecha_nac_nino": "Fecha Nac. Niño",
     "fecha_nac_responsable": "Fecha Nac. Responsable",
-    # Vacunas
     "hep._b": "Hepatitis B (<1 año)",
     "bcg": "BCG (<1 año)",
     "1a._(fipv)": "Polio 1 (<1 año)",
@@ -124,10 +118,6 @@ RENOMBRES = {
     "3a..2": "Otras Vacunas 3 (1-7 años)"
 }
 
-# ==================================================
-# COLUMNAS FECHA (para convertir números a fecha)
-# ==================================================
-
 COLUMNAS_FECHA = {
     "hep._b", "bcg",
     "1a._(fipv)", "2a._(fipv)", "1a._(ipv)",
@@ -151,10 +141,6 @@ COLUMNAS_FECHA = {
     "1a..7", "2a..7", "3a..2"
 }
 
-# ==================================================
-# COLUMNAS EXCLUIDAS (no se muestran en la tabla)
-# ==================================================
-
 COLUMNAS_EXCLUIDAS = [
     "rowid", "no.", "área", "pueblo", "comunidad",
     "departamento.1", "municipio.1", "comunidad.1",
@@ -162,10 +148,6 @@ COLUMNAS_EXCLUIDAS = [
     "día", "mes", "año_1", "día.1", "mes.1", "año.1",
     "hombre", "mujer"
 ]
-
-# ==================================================
-# FUNCIONES DE PROCESAMIENTO
-# ==================================================
 
 def limpiar_numero(valor):
     try:
@@ -218,7 +200,7 @@ def formatear_fecha(dia, mes, año):
         return ""
 
 # ==================================================
-# HTML
+# HTML (igual que antes)
 # ==================================================
 
 HTML = """
@@ -467,10 +449,6 @@ function exportarExcel(){
 def index():
     return render_template_string(HTML)
 
-# ==================================================
-# BUSCAR CON FTS (Full-Text Search) y límite dinámico
-# ==================================================
-
 @app.route('/buscar')
 @auth.login_required
 def buscar():
@@ -490,7 +468,7 @@ def buscar():
     try:
         client = get_turso_client()
         
-        # --- 1. FTS para búsqueda de texto ---
+        # FTS para búsqueda de texto
         fts_condition = ""
         fts_params = []
         
@@ -521,7 +499,7 @@ def buscar():
                 fts_condition = f'"nombre_responsable" LIKE ?'
                 fts_params.append(f"%{query}%")
         
-        # --- 2. Construir condiciones adicionales ---
+        # Construir condiciones adicionales
         condiciones = []
         parametros = []
         
@@ -579,7 +557,7 @@ def buscar():
         where = " AND ".join(where_parts) if where_parts else ""
         all_params = fts_params + parametros
         
-        # --- 3. Límite dinámico según cantidad de filtros ---
+        # Límite dinámico
         num_filtros = len(condiciones)
         if num_filtros > 2:
             limite = 15
@@ -595,31 +573,11 @@ def buscar():
         logger.info(f"📦 Parámetros: {all_params}")
         logger.info(f"📌 Límite aplicado: {limite}")
         
-        # --- 4. Ejecutar consulta con manejo de errores ---
+        # ---- EJECUCIÓN ROBUSTA ----
         try:
             result = client.execute(sql, all_params)
-            # Intentar obtener filas y columnas de forma segura
-            if hasattr(result, 'rows') and callable(result.rows):
-                rows = result.rows()
-                # Intentar obtener columnas desde el ResultSet
-                if hasattr(result, 'columns') and callable(result.columns):
-                    columns = result.columns()
-                else:
-                    # Si no hay columns(), intentar obtener de la primera fila si es dict
-                    if rows and isinstance(rows[0], dict):
-                        columns = list(rows[0].keys())
-                    else:
-                        # Si no hay columnas, usar las reales
-                        columns = COLUMNAS_REALES
-            else:
-                # Si result es una lista directamente
-                rows = list(result)
-                if rows and isinstance(rows[0], dict):
-                    columns = list(rows[0].keys())
-                else:
-                    columns = COLUMNAS_REALES
         except Exception as e:
-            logger.error(f"❌ Error en ejecución de consulta: {str(e)}")
+            logger.error(f"❌ Error al ejecutar consulta: {str(e)}")
             client.close()
             return jsonify({
                 "rows": [],
@@ -628,29 +586,56 @@ def buscar():
                 "error": f"Error en la consulta: {str(e)}"
             })
         
+        # Manejar respuesta (ResultSet o lista)
+        try:
+            if hasattr(result, 'rows') and callable(result.rows):
+                rows = result.rows()
+                # Intentar obtener columnas
+                if hasattr(result, 'columns') and callable(result.columns):
+                    columns = result.columns()
+                else:
+                    # Si no hay columns(), intentar de la primera fila
+                    if rows and isinstance(rows[0], dict):
+                        columns = list(rows[0].keys())
+                    else:
+                        columns = COLUMNAS_REALES
+            else:
+                # Si es una lista directamente (caso HTTPS)
+                rows = list(result)
+                if rows and isinstance(rows[0], dict):
+                    columns = list(rows[0].keys())
+                else:
+                    columns = COLUMNAS_REALES
+        except Exception as e:
+            logger.error(f"❌ Error al procesar resultado: {str(e)}")
+            client.close()
+            return jsonify({
+                "rows": [],
+                "columnas": [],
+                "total": 0,
+                "error": f"Error al procesar datos: {str(e)}"
+            })
+        
         logger.info(f"📊 Filas obtenidas: {len(rows)}")
         
         if not rows:
             client.close()
             return jsonify({"rows": [], "columnas": [], "total": 0})
         
-        # Convertir a lista de diccionarios usando las columnas obtenidas
+        # Convertir a diccionarios
         rows_dict = [dict(zip(columns, row)) for row in rows]
         
-        # Calcular género y fechas
+        # Calcular campos extras
         for row in rows_dict:
             row["genero"] = obtener_genero(row)
             row["fecha_nac_nino"] = formatear_fecha(row.get("día"), row.get("mes"), row.get("año_1"))
             row["fecha_nac_responsable"] = formatear_fecha(row.get("día.1"), row.get("mes.1"), row.get("año.1"))
         
+        # Columnas finales
         columnas_finales = [c for c in columns if c not in COLUMNAS_EXCLUIDAS]
-        # Agregar columnas calculadas si no existen
-        if "genero" not in columnas_finales:
-            columnas_finales.append("genero")
-        if "fecha_nac_nino" not in columnas_finales:
-            columnas_finales.append("fecha_nac_nino")
-        if "fecha_nac_responsable" not in columnas_finales:
-            columnas_finales.append("fecha_nac_responsable")
+        for extra in ["genero", "fecha_nac_nino", "fecha_nac_responsable"]:
+            if extra not in columnas_finales:
+                columnas_finales.append(extra)
         
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
         
@@ -682,7 +667,7 @@ def buscar():
         })
 
 # ==================================================
-# EXPORTAR CON LÍMITE DE 30 REGISTROS
+# EXPORTAR
 # ==================================================
 
 MAX_EXPORT_ROWS = 30
@@ -763,22 +748,24 @@ def exportar():
         
         try:
             result = client.execute(sql, parametros)
-            if hasattr(result, 'rows') and callable(result.rows):
-                rows = result.rows()
-                if hasattr(result, 'columns') and callable(result.columns):
-                    columns = result.columns()
-                else:
-                    columns = COLUMNAS_REALES
-            else:
-                rows = list(result)
-                if rows and isinstance(rows[0], dict):
-                    columns = list(rows[0].keys())
-                else:
-                    columns = COLUMNAS_REALES
         except Exception as e:
-            logger.error(f"❌ Error en exportación: {str(e)}")
+            logger.error(f"❌ Error al exportar: {str(e)}")
             client.close()
             return jsonify({"error": f"Error en la exportación: {str(e)}"}), 500
+        
+        # Manejar resultado
+        if hasattr(result, 'rows') and callable(result.rows):
+            rows = result.rows()
+            if hasattr(result, 'columns') and callable(result.columns):
+                columns = result.columns()
+            else:
+                columns = COLUMNAS_REALES
+        else:
+            rows = list(result)
+            if rows and isinstance(rows[0], dict):
+                columns = list(rows[0].keys())
+            else:
+                columns = COLUMNAS_REALES
         
         if not rows:
             client.close()
@@ -806,13 +793,9 @@ def exportar():
         ws.title = "Resultados"
         
         columnas_finales = [c for c in columns if c not in COLUMNAS_EXCLUIDAS]
-        if "genero" not in columnas_finales:
-            columnas_finales.append("genero")
-        if "fecha_nac_nino" not in columnas_finales:
-            columnas_finales.append("fecha_nac_nino")
-        if "fecha_nac_responsable" not in columnas_finales:
-            columnas_finales.append("fecha_nac_responsable")
-        
+        for extra in ["genero", "fecha_nac_nino", "fecha_nac_responsable"]:
+            if extra not in columnas_finales:
+                columnas_finales.append(extra)
         titulos_columnas = [RENOMBRES.get(c, c) for c in columnas_finales]
         ws.append(titulos_columnas)
         for cell in ws[1]:
@@ -843,10 +826,6 @@ def exportar():
     except Exception as e:
         logger.error(f"❌ Error en /exportar: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
-
-# ==================================================
-# INICIO
-# ==================================================
 
 if __name__ == '__main__':
     logger.info("🚀 Servidor iniciado...")
